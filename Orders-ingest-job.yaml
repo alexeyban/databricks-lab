@@ -1,0 +1,26 @@
+resources:
+  jobs:
+    Orders_ingest_job:
+      name: Orders ingest job
+      schedule:
+        quartz_cron_expression: 56 4/5 * * * ?
+        timezone_id: Europe/Belgrade
+        pause_status: PAUSED
+      tasks:
+        - task_key: Ingest_to_Bronze
+          notebook_task:
+            notebook_path: /Workspace/Users/alexeyban@gmail.com/databricks-lab/NB_ingest_to_bronze
+            source: WORKSPACE
+        - task_key: ingest_To_Silver
+          depends_on:
+            - task_key: Ingest_to_Bronze
+          notebook_task:
+            notebook_path: /Workspace/Users/alexeyban@gmail.com/databricks-lab/NB_process_to_silver
+            source: WORKSPACE
+      git_source:
+        git_url: https://github.com/alexeyban/databricks-lab
+        git_provider: gitHub
+        git_commit: main
+      queue:
+        enabled: true
+      performance_target: PERFORMANCE_OPTIMIZED
