@@ -9,14 +9,14 @@ resources:
       tasks:
         - task_key: Ingest_to_Bronze
           notebook_task:
-            notebook_path: /Workspace/Users/alexeyban@gmail.com/databricks-lab/NB_ingest_to_bronze
-            source: WORKSPACE
+            notebook_path: NB_ingest_to_bronze.ipynb
+            source: GIT
         - task_key: ingest_To_Silver
           depends_on:
             - task_key: Ingest_to_Bronze
           notebook_task:
-            notebook_path: /Workspace/Users/alexeyban@gmail.com/databricks-lab/NB_process_to_silver
-            source: WORKSPACE
+            notebook_path: NB_process_to_silver
+            source: GIT
       git_source:
         git_url: https://github.com/alexeyban/databricks-lab
         git_provider: gitHub
