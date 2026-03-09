@@ -1,0 +1,7 @@
+version: 2
+
+sources:
+  - name: silver
+    schema: silver
+    tables:
+      - name: silver_orders
