@@ -4,6 +4,7 @@ import json
 import os
 import sys
 import time
+from typing import Dict
 
 from databricks.sdk import WorkspaceClient
 
@@ -19,6 +20,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--run-name", default="skill-run")
     parser.add_argument("--poll-seconds", type=int, default=5)
     parser.add_argument("--timeout-seconds", type=int, default=1800)
+    parser.add_argument(
+        "--notebook-param",
+        action="append",
+        default=[],
+        help="Notebook parameter override in KEY=VALUE form. Can be passed multiple times.",
+    )
     return parser.parse_args()
 
 
@@ -30,9 +37,28 @@ def build_client() -> WorkspaceClient:
     return WorkspaceClient(host=host, token=token)
 
 
+def parse_notebook_params(values: list[str]) -> Dict[str, str]:
+    params: Dict[str, str] = {}
+    for value in values:
+        if "=" not in value:
+            raise RuntimeError(f"Invalid --notebook-param '{value}'. Expected KEY=VALUE.")
+        key, raw_value = value.split("=", 1)
+        params[key] = raw_value
+    return params
+
+
+def enum_value(value):
+    return getattr(value, "value", value)
+
+
 def submit_run(client: WorkspaceClient, args: argparse.Namespace) -> int:
+    notebook_params = parse_notebook_params(args.notebook_param)
+
     if args.job_id:
-        run = client.jobs.run_now(job_id=args.job_id)
+        run = client.jobs.run_now(
+            job_id=args.job_id,
+            notebook_params=notebook_params or None,
+        )
         return run.run_id
 
     if not args.notebook_path or not args.cluster_id:
@@ -46,6 +72,7 @@ def submit_run(client: WorkspaceClient, args: argparse.Namespace) -> int:
                 "existing_cluster_id": args.cluster_id,
                 "notebook_task": {
                     "notebook_path": args.notebook_path,
+                    "base_parameters": notebook_params or None,
                 },
             }
         ],
@@ -59,8 +86,8 @@ def wait_for_terminal_state(client: WorkspaceClient, run_id: int, poll_seconds: 
 
     while time.time() < deadline:
         run = client.jobs.get_run(run_id=run_id)
-        state = run.state.life_cycle_state
-        result = run.state.result_state
+        state = enum_value(run.state.life_cycle_state)
+        result = enum_value(run.state.result_state)
         message = run.state.state_message
         history.append(
             {
@@ -89,16 +116,27 @@ def main() -> int:
 
     output = {
         "run_id": run_id,
-        "life_cycle_state": run.state.life_cycle_state,
-        "result_state": run.state.result_state,
+        "life_cycle_state": enum_value(run.state.life_cycle_state),
+        "result_state": enum_value(run.state.result_state),
         "state_message": run.state.state_message,
         "notebook_path": args.notebook_path,
         "job_id": args.job_id,
+        "notebook_params": parse_notebook_params(args.notebook_param),
+        "tasks": [
+            {
+                "task_key": task.task_key,
+                "run_id": task.run_id,
+                "life_cycle_state": enum_value(task.state.life_cycle_state),
+                "result_state": enum_value(task.state.result_state),
+                "state_message": task.state.state_message,
+            }
+            for task in (run.tasks or [])
+        ],
         "history": history,
     }
     print(json.dumps(output, indent=2, default=str))
 
-    return 0 if run.state.result_state == "SUCCESS" else 1
+    return 0 if enum_value(run.state.result_state) == "SUCCESS" else 1
 
 
 if __name__ == "__main__":

@@ -23,6 +23,7 @@ Prefer the bundled scripts over rewriting shell commands. They encode the reposi
 - Use `scripts/start_stack.sh`.
 - This runs `docker compose up -d` from the repository root.
 - If the user asked for verification, follow with `docker compose ps` or service-specific health checks.
+- If Kafka must be reachable from Databricks through an internal network boundary, first use `scripts/prepare_ngrok_kafka.py` and then start Compose with the discovered `KAFKA_EXTERNAL_HOST` and `KAFKA_EXTERNAL_PORT`.
 
 ### 3. Register Debezium connector if CDC ingestion needs to be exercised
 
@@ -50,13 +51,15 @@ This runs 20 product mutations and 40 order mutations.
 - Provide either:
   - `--job-id` to run an existing Databricks job, or
   - `--notebook-path` and `--cluster-id` to submit a one-off notebook run.
+- For dynamic Kafka exposure, pass `--notebook-param KAFKA_BOOTSTRAP=<ngrok-host:port>` so the current tunnel endpoint is used at run time instead of a stale static value.
 - This script uses `DATABRICKS_HOST` and `DATABRICKS_TOKEN` from the environment.
 
 Examples:
 
 ```bash
 python3 skills/docker-databricks-lab-ops/scripts/run_databricks_notebook.py \
-  --job-id 123
+  --job-id 123 \
+  --notebook-param KAFKA_BOOTSTRAP=0.tcp.eu.ngrok.io:12345
 ```
 
 ```bash
@@ -84,12 +87,19 @@ python3 skills/docker-databricks-lab-ops/scripts/run_databricks_notebook.py \
 - State whether notebook verification passed or failed.
 - If it failed, include the exact failure message and the next corrective step.
 
+### 8. Use the smoke test when the user wants one-command verification
+
+- Use `scripts/smoke_test_notebooks.py`.
+- It discovers or starts an ngrok tunnel, restarts Docker with the correct advertised Kafka listener, repairs the local source schema if it is still on the legacy `orders.product` layout, registers the connector, runs bounded load, triggers Databricks notebook runs, and waits for terminal results.
+
 ## Scripts
 
 - `scripts/start_stack.sh`: start Docker Compose services for the lab
+- `scripts/prepare_ngrok_kafka.py`: discover or start an ngrok TCP tunnel for Kafka and print the current public bootstrap
 - `scripts/register_connector.sh`: register the Debezium connector from `postgres-connector.json`
 - `scripts/run_generators.sh`: run product and order generators in the correct order
 - `scripts/run_databricks_notebook.py`: launch or submit a Databricks run and poll to completion
+- `scripts/smoke_test_notebooks.py`: run the end-to-end smoke test with dynamic ngrok bootstrap handling
 
 ## References
 
