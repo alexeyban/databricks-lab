@@ -49,6 +49,7 @@ Agent-system inspiration for this repository was borrowed from [agency-agents](h
   - `NB_schema_drift_helpers.ipynb`: Schema drift detection and alerting
   - `NB_schema_contracts.ipynb`: Expected schema contracts for all layers
 - `Orders-ingest-job.yaml`: Databricks job definition for Bronze and Silver processing
+- `databricks-lab-architecture.drawio`: editable architecture diagram with overview and detailed pages
 - `cdc_gold/`: dbt project for Gold models with referential integrity tests
 
 ## End-to-End Flow
@@ -174,6 +175,32 @@ Kafka is configured with two listeners:
 - `${KAFKA_EXTERNAL_HOST:-localhost}:${KAFKA_EXTERNAL_PORT:-9093}` for host or remote clients
 
 If Databricks needs to reach Kafka from outside your machine, set `KAFKA_EXTERNAL_HOST` and `KAFKA_EXTERNAL_PORT` before starting Compose.
+
+## ngrok For Local Projects
+
+If this project runs on your laptop or inside a private network, Databricks will not be able to reach local Kafka directly. In that case, expose Kafka through an `ngrok` TCP tunnel and use the public `host:port` as the Databricks bootstrap server.
+
+Typical flow:
+
+```bash
+python3 skills/docker-databricks-lab-ops/scripts/prepare_ngrok_kafka.py
+```
+
+Then start Docker with the discovered public endpoint:
+
+```bash
+export KAFKA_EXTERNAL_HOST=<ngrok-host>
+export KAFKA_EXTERNAL_PORT=<ngrok-port>
+docker compose up -d
+```
+
+When you run the Databricks job or notebooks, pass the current tunnel endpoint as `KAFKA_BOOTSTRAP` instead of hardcoding it permanently into the repository, because `ngrok` values change after restart.
+
+For the full automated flow, use:
+
+```bash
+python3 skills/docker-databricks-lab-ops/scripts/smoke_test_notebooks.py
+```
 
 ## Secret Hygiene
 

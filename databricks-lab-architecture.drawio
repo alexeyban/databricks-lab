@@ -1,0 +1,219 @@
+<mxfile host="app.diagrams.net" modified="2026-03-11T21:30:00.000Z" agent="Codex" version="24.7.17">
+  <diagram id="overview-page" name="Overview">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="2" value="Local Developer Machine" style="swimlane;fontStyle=1;horizontal=1;rounded=1;childLayout=stackLayout;resizeParent=1;resizeParentMax=0;collapsible=0;whiteSpace=wrap;html=1;startSize=28;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="40" y="80" width="430" height="530" as="geometry"/>
+        </mxCell>
+        <mxCell id="3" value="PyCharm / Git Repo&#xa;Notebook source, job YAML, skills, smoke test" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="2">
+          <mxGeometry x="20" y="50" width="390" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="4" value="Docker CDC Stack&#xa;PostgreSQL + Kafka + Debezium + Schema Registry + Kafka UI" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="2">
+          <mxGeometry x="20" y="145" width="390" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="5" value="Data Generators&#xa;load_products_generator.py&#xa;load_generator.py" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="2">
+          <mxGeometry x="20" y="260" width="185" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="6" value="Smoke Test / Runtime Automation&#xa;prepare_ngrok_kafka.py&#xa;smoke_test_notebooks.py&#xa;run_databricks_notebook.py" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="2">
+          <mxGeometry x="225" y="260" width="185" height="115" as="geometry"/>
+        </mxCell>
+        <mxCell id="7" value="ngrok TCP Tunnel&#xa;Exposes local Kafka to Databricks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="2">
+          <mxGeometry x="20" y="390" width="390" height="75" as="geometry"/>
+        </mxCell>
+        <mxCell id="8" value="Databricks Workspace" style="swimlane;fontStyle=1;horizontal=1;rounded=1;childLayout=stackLayout;resizeParent=1;resizeParentMax=0;collapsible=0;whiteSpace=wrap;html=1;startSize=28;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="620" y="80" width="470" height="530" as="geometry"/>
+        </mxCell>
+        <mxCell id="9" value="Orders ingest job&#xa;Multi-task Databricks Job" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="8">
+          <mxGeometry x="25" y="50" width="420" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="10" value="Bronze Notebook&#xa;NB_ingest_to_bronze&#xa;Reads Kafka CDC topics" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="8">
+          <mxGeometry x="25" y="145" width="195" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="11" value="Silver Notebooks&#xa;NB_process_to_silver&#xa;NB_process_products_silver" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="8">
+          <mxGeometry x="250" y="145" width="195" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="12" value="Unity Catalog / Delta Lake&#xa;workspace.bronze&#xa;workspace.silver" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="8">
+          <mxGeometry x="25" y="265" width="420" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="13" value="cdc_gold dbt Project&#xa;Gold models + data quality tests" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="8">
+          <mxGeometry x="25" y="370" width="420" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="14" value="Monitoring / Troubleshooting&#xa;Job run status, task states, smoke test JSON summary" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="8">
+          <mxGeometry x="25" y="465" width="420" height="75" as="geometry"/>
+        </mxCell>
+        <mxCell id="15" value="GitHub" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="1170" y="140" width="190" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="16" value="CDC changes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="1" source="4" target="7">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="17" value="reachable bootstrap&#xa;host:port" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="1" source="7" target="10">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="18" value="run + monitor" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="1" source="6" target="9">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="19" value="load source data" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="1" source="5" target="4">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="20" value="git_source" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="1" source="15" target="9">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="21" value="Bronze ingest" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="1" source="9" target="10">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="22" value="transform / merge" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="1" source="10" target="11">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="23" value="Bronze + Silver tables" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="1" source="11" target="12">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="24" value="build gold + tests" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="1" source="12" target="13">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="25" value="run results" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="1" source="9" target="14">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="detailed-page" name="Detailed">
+    <mxGraphModel dx="1920" dy="1080" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1920" pageHeight="1080" math="0" shadow="0">
+      <root>
+        <mxCell id="100"/>
+        <mxCell id="101" parent="100"/>
+        <mxCell id="102" value="Local Docker and Control Plane" style="swimlane;fontStyle=1;horizontal=1;rounded=1;childLayout=stackLayout;resizeParent=1;resizeParentMax=0;collapsible=0;whiteSpace=wrap;html=1;startSize=28;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="101">
+          <mxGeometry x="30" y="60" width="620" height="760" as="geometry"/>
+        </mxCell>
+        <mxCell id="103" value="PostgreSQL&#xa;Tables: orders, products&#xa;Source of WAL / CDC" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="102">
+          <mxGeometry x="20" y="50" width="180" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="104" value="Debezium Connect&#xa;postgres-connector.json" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="102">
+          <mxGeometry x="230" y="50" width="180" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="105" value="Kafka Broker&#xa;Internal: kafka:9092&#xa;External: KAFKA_EXTERNAL_HOST:KAFKA_EXTERNAL_PORT" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="102">
+          <mxGeometry x="440" y="50" width="160" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="106" value="Schema Registry" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="102">
+          <mxGeometry x="440" y="190" width="160" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="107" value="Kafka UI" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="102">
+          <mxGeometry x="440" y="270" width="160" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="108" value="Product Generator&#xa;generators/load_products_generator.py" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="102">
+          <mxGeometry x="20" y="190" width="180" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="109" value="Orders Generator&#xa;generators/load_generator.py" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="102">
+          <mxGeometry x="20" y="290" width="180" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="110" value="ngrok TCP Tunnel&#xa;Dynamic public endpoint for Kafka" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="102">
+          <mxGeometry x="230" y="210" width="180" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="111" value="prepare_ngrok_kafka.py&#xa;Discovers or starts tunnel&#xa;Returns current host:port" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="102">
+          <mxGeometry x="20" y="410" width="180" height="95" as="geometry"/>
+        </mxCell>
+        <mxCell id="112" value="smoke_test_notebooks.py&#xa;Normalizes notebooks&#xa;Repairs schema&#xa;Restarts stack&#xa;Runs Databricks job&#xa;Waits for terminal states" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="102">
+          <mxGeometry x="230" y="390" width="180" height="150" as="geometry"/>
+        </mxCell>
+        <mxCell id="113" value="run_databricks_notebook.py&#xa;Run-now / submit helper&#xa;Supports notebook param overrides" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="102">
+          <mxGeometry x="440" y="390" width="160" height="95" as="geometry"/>
+        </mxCell>
+        <mxCell id="114" value="Git Repository&#xa;notebooks, job YAML, runtime, skills" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="102">
+          <mxGeometry x="20" y="560" width="580" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="115" value="Databricks Workspace" style="swimlane;fontStyle=1;horizontal=1;rounded=1;childLayout=stackLayout;resizeParent=1;resizeParentMax=0;collapsible=0;whiteSpace=wrap;html=1;startSize=28;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="101">
+          <mxGeometry x="760" y="60" width="740" height="900" as="geometry"/>
+        </mxCell>
+        <mxCell id="116" value="Orders ingest job&#xa;job_id: 574281734474239&#xa;schedule paused by default" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="115">
+          <mxGeometry x="20" y="50" width="700" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="117" value="Task 1: Ingest_to_Bronze&#xa;Notebook: notebooks/bronze/NB_ingest_to_bronze&#xa;Reads KAFKA_BOOTSTRAP via notebook params" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="115">
+          <mxGeometry x="20" y="160" width="320" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="118" value="Task 2: ingest_To_Silver&#xa;Notebook: notebooks/silver/NB_process_to_silver&#xa;Depends on Bronze task" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="115">
+          <mxGeometry x="380" y="160" width="340" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="119" value="One-off submit: NB_process_products_silver&#xa;Triggered by smoke test when needed" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="115">
+          <mxGeometry x="20" y="290" width="700" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="120" value="Helper notebooks&#xa;NB_catalog_helpers&#xa;NB_schema_contracts&#xa;NB_schema_drift_helpers" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="115">
+          <mxGeometry x="20" y="390" width="700" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="121" value="Unity Catalog: workspace.bronze&#xa;Tables: bronze.orders, bronze.products&#xa;Raw Debezium envelopes" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="115">
+          <mxGeometry x="20" y="500" width="320" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="122" value="Unity Catalog: workspace.silver&#xa;Tables: silver.silver_orders, silver.silver_products&#xa;Current-state merge outputs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="115">
+          <mxGeometry x="380" y="500" width="340" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="123" value="dbt Gold Project&#xa;cdc_gold&#xa;gold_orders, gold_products&#xa;data quality + referential tests" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="115">
+          <mxGeometry x="20" y="630" width="700" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="124" value="Operational feedback&#xa;Run IDs, task states, state messages, JSON summaries" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="115">
+          <mxGeometry x="20" y="750" width="700" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="125" value="WAL / CDC" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="101" source="103" target="104">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="126" value="topics cdc.public.*" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="101" source="104" target="105">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="127" value="insert / update" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="101" source="108" target="103">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="128" value="insert / update" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="101" source="109" target="103">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="129" value="advertised listener" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="101" source="105" target="110">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="130" value="discover current endpoint" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="101" source="111" target="110">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="131" value="use current ngrok host:port" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="101" source="110" target="117">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="132" value="run_now / submit" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="101" source="112" target="116">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="133" value="direct helper path" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="101" source="113" target="119">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="134" value="git_source main" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="101" source="114" target="116">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="135" value="task 1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="101" source="116" target="117">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="136" value="depends_on" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="101" source="117" target="118">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="137" value="uses helpers" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="101" source="117" target="120">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="138" value="uses helpers" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="101" source="118" target="120">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="139" value="stream raw CDC" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="101" source="117" target="121">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="140" value="merge current state" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="101" source="118" target="122">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="141" value="merge products" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="101" source="119" target="122">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="142" value="build gold + tests" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="101" source="121" target="123">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="143" value="build gold + tests" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="101" source="122" target="123">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="144" value="status, failures, diagnostics" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="101" source="116" target="124">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
