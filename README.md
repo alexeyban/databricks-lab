@@ -2,6 +2,8 @@
 
 This project demonstrates an end-to-end CDC pipeline from PostgreSQL into a Databricks medallion lakehouse:
 
+Agent-system inspiration for this repository was borrowed from [agency-agents](https://github.com/msitarzewski/agency-agents/).
+
 - PostgreSQL generates row-level changes for `orders` and `products` tables
 - Debezium captures WAL changes and publishes them to Kafka topics with the `cdc` prefix
 - A Databricks Bronze notebook ingests raw Kafka events into Delta tables per source table
@@ -172,6 +174,20 @@ Kafka is configured with two listeners:
 - `${KAFKA_EXTERNAL_HOST:-localhost}:${KAFKA_EXTERNAL_PORT:-9093}` for host or remote clients
 
 If Databricks needs to reach Kafka from outside your machine, set `KAFKA_EXTERNAL_HOST` and `KAFKA_EXTERNAL_PORT` before starting Compose.
+
+## Secret Hygiene
+
+Do not commit real credentials to this repository.
+
+Use [\.envexample](/home/legion/PycharmProjects/gitlab/databricks-lab/.envexample) as the template for local configuration and keep your real values only in a local `.env` or in your secret manager.
+
+Example:
+
+```bash
+cp .envexample .env
+```
+
+Then edit `.env` locally with your real Databricks values. Do not commit `.env`, `.databrickscfg`, or generated logs.
 
 ## Source Data Generators
 
