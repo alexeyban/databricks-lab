@@ -1,15 +1,29 @@
-Welcome to your new dbt project!
+# cdc_gold
 
-### Using the starter project
+This dbt project builds the Gold presentation layer for the Databricks CDC lab.
 
-Try running the following commands:
-- dbt run
-- dbt test
+## Expected upstream objects
 
+- Bronze raw events are written into `workspace.bronze.orders`
+- Silver current-state data is merged into `workspace.silver.silver_orders`
+- dbt reads from the `silver.silver_orders` source and writes Gold models into the `gold` schema
 
-### Resources:
-- Learn more about dbt [in the docs](https://docs.getdbt.com/docs/introduction)
-- Check out [Discourse](https://discourse.getdbt.com/) for commonly asked questions and answers
-- Join the [chat](https://community.getdbt.com/) on Slack for live discussions and support
-- Find [dbt events](https://events.getdbt.com) near you
-- Check out [the blog](https://blog.getdbt.com/) for the latest news on dbt's development and best practices
+## Usage
+
+```bash
+cd cdc_gold
+dbt debug
+dbt build
+```
+
+## Models
+
+- `gold_orders`: presentation-friendly current-state orders mart with semantic columns and incremental merge behavior
+
+## Data quality
+
+The project includes:
+
+- source tests for uniqueness and nullability on `silver_orders`
+- model tests on `gold_orders`
+- a source freshness policy driven by `last_updated_dt`

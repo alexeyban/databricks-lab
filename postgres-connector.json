@@ -1,22 +1,19 @@
 {
- "name": "postgres-connector",
- "config": {
-   "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
-   "database.hostname": "postgres",
-   "database.port": "5432",
-   "database.user": "postgres",
-   "database.password": "postgres",
-   "database.dbname": "demo",
-   "database.server.name": "demo-server",
-
-   "plugin.name": "pgoutput",
-   "publication.name": "dbz_publication",
-
-   "slot.name": "debezium_slot",
-
-   "topic.prefix": "cdc",
-
-   "tombstones.on.delete": "false",
-   "snapshot.mode": "initial"
- }
+  "name": "postgres-connector",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "database.hostname": "postgres",
+    "database.port": "5432",
+    "database.user": "postgres",
+    "database.password": "postgres",
+    "database.dbname": "demo",
+    "database.server.name": "demo-server",
+    "plugin.name": "pgoutput",
+    "publication.name": "dbz_publication",
+    "slot.name": "debezium_slot",
+    "topic.prefix": "cdc",
+    "table.include.list": "public.orders,public.products",
+    "tombstones.on.delete": "false",
+    "snapshot.mode": "initial"
+  }
 }

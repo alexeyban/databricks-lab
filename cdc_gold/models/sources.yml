@@ -3,5 +3,37 @@ version: 2
 sources:
   - name: silver
     schema: silver
+    loaded_at_field: last_updated_dt
+    freshness:
+      warn_after: {count: 30, period: minute}
+      error_after: {count: 2, period: hour}
     tables:
       - name: silver_orders
+        description: Current-state orders table produced by the Silver Databricks streaming merge.
+        columns:
+          - name: id
+            tests:
+              - not_null
+              - unique
+          - name: product_id
+            tests:
+              - not_null
+          - name: product_name
+            tests:
+              - not_null
+          - name: price
+            tests:
+              - not_null
+          - name: last_updated_dt
+            tests:
+              - not_null
+      - name: silver_products
+        description: Current-state products table produced by the Silver Databricks streaming merge.
+        columns:
+          - name: id
+            tests:
+              - not_null
+              - unique
+          - name: product_name
+            tests:
+              - not_null

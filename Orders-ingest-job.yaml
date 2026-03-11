@@ -1,26 +1,39 @@
 resources:
   jobs:
-    Orders_ingest_job:
+    orders_ingest_job:
       name: Orders ingest job
       schedule:
-        quartz_cron_expression: 56 4/5 * * * ?
+        quartz_cron_expression: 0 0/5 * * * ?
         timezone_id: Europe/Belgrade
         pause_status: PAUSED
       tasks:
-        - task_key: Ingest_to_Bronze
+        - task_key: ingest_to_bronze
           notebook_task:
-            notebook_path: NB_ingest_to_bronze.ipynb
+            notebook_path: notebooks/bronze/NB_ingest_to_bronze.ipynb
             source: GIT
-        - task_key: ingest_To_Silver
+            base_parameters:
+              KAFKA_BOOTSTRAP: REPLACE_WITH_REACHABLE_KAFKA_BOOTSTRAP
+              TOPIC_PATTERN: cdc.public.orders
+              CATALOG: workspace
+              BRONZE_SCHEMA: bronze
+              CHECKPOINT_PATH: /Volumes/workspace/default/mnt/checkpoints/bronze_orders
+        - task_key: ingest_to_silver
           depends_on:
-            - task_key: Ingest_to_Bronze
+            - task_key: ingest_to_bronze
           notebook_task:
-            notebook_path: NB_process_to_silver
+            notebook_path: notebooks/silver/NB_process_to_silver.ipynb
             source: GIT
+            base_parameters:
+              CATALOG: workspace
+              BRONZE_SCHEMA: bronze
+              BRONZE_TABLE: orders
+              SILVER_SCHEMA: silver
+              SILVER_TABLE: silver_orders
+              CHECKPOINT_PATH: /Volumes/workspace/default/mnt/checkpoints/orders_silver
       git_source:
         git_url: https://github.com/alexeyban/databricks-lab
         git_provider: gitHub
-        git_commit: main
+        git_branch: main
       queue:
         enabled: true
       performance_target: PERFORMANCE_OPTIMIZED

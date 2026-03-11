@@ -1,93 +1,240 @@
-# databricks-lab
+# Databricks CDC Lakehouse Lab
 
+This project demonstrates an end-to-end CDC pipeline from PostgreSQL into a Databricks medallion lakehouse:
 
+- PostgreSQL generates row-level changes for `orders` and `products` tables
+- Debezium captures WAL changes and publishes them to Kafka topics with the `cdc` prefix
+- A Databricks Bronze notebook ingests raw Kafka events into Delta tables per source table
+- A Databricks Silver notebook normalizes Debezium envelopes into current-state Delta tables with **schema evolution support**
+- dbt builds a Gold presentation model with foreign key relationships and data quality tests
 
-## Getting started
+## Schema Design
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+### Source Tables (PostgreSQL)
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+**products**
+- `id` (SERIAL PRIMARY KEY)
+- `product_name` (TEXT)
+- `weight` (NUMERIC)
+- `color` (TEXT)
+- `created_at`, `updated_at` (TIMESTAMP)
 
-## Add your files
+**orders**
+- `id` (SERIAL PRIMARY KEY)
+- `product_id` (INTEGER FOREIGN KEY → products.id)
+- `price` (NUMERIC)
+- `created_at` (TIMESTAMP)
 
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+### Medallion Architecture
 
+| Layer | Table | Description |
+|-------|-------|-------------|
+| Bronze | `bronze.orders`, `bronze.products` | Raw Debezium CDC events |
+| Silver | `silver.silver_orders`, `silver.silver_products` | Current-state with schema evolution |
+| Gold | `gold.gold_orders`, `gold.gold_products` | Business-ready with denormalization |
+
+## Repository Layout
+
+- `docker-compose.yml`: local PostgreSQL, Kafka, Debezium Connect, Schema Registry, Kafka UI
+- `init-db.sql`: source schema bootstrap with foreign key relationships
+- `migrate_schema.sql`: migration script for existing deployments (TEXT → FK)
+- `postgres-connector.json`: Debezium PostgreSQL source connector definition
+- `generators/`: local data generators for `orders` and `products`
+- `notebooks/bronze/`: Databricks Bronze ingestion notebook
+- `notebooks/silver/`: Databricks Silver merge notebooks with schema evolution
+- `notebooks/helpers/`: Reusable catalog helper functions
+  - `NB_catalog_helpers.ipynb`: Schema/table creation utilities
+  - `NB_schema_drift_helpers.ipynb`: Schema drift detection and alerting
+  - `NB_schema_contracts.ipynb`: Expected schema contracts for all layers
+- `Orders-ingest-job.yaml`: Databricks job definition for Bronze and Silver processing
+- `cdc_gold/`: dbt project for Gold models with referential integrity tests
+
+## End-to-End Flow
+
+1. Start local CDC infrastructure with Docker Compose.
+2. Register `postgres-connector.json` in Debezium Connect.
+3. Run the products generator first (orders reference products):
+   ```bash
+   python3 generators/load_products_generator.py
+   ```
+4. Run the orders generator:
+   ```bash
+   python3 generators/load_generator.py
+   ```
+5. Run the Bronze notebook to ingest raw CDC events.
+6. Run the Silver notebooks:
+   - `NB_process_to_silver.ipynb` for orders
+   - `NB_process_products_silver.ipynb` for products
+7. Run dbt in `cdc_gold/` to build the Gold layer with referential integrity.
+
+## Schema Evolution
+
+The Silver layer supports **schema evolution** - new columns added to the source schema will be automatically propagated:
+
+- **Backward compatible**: Legacy `product` (TEXT) field is preserved as `product_legacy` during transition
+- **Forward compatible**: New fields in Debezium events are automatically added to Silver tables
+- **Dynamic MERGE**: Upsert logic adapts to the current table schema at runtime
+
+To enable schema evolution in your own pipelines:
+1. Set `.option("mergeSchema", "true")` on streaming reads/writes
+2. Use flexible JSON schemas that include both old and new fields
+3. Build MERGE statements dynamically based on existing columns
+
+## Schema Drift Detection
+
+The pipeline includes **schema drift detection** with configurable policies and alerting:
+
+### Policies
+
+| Policy | Behavior | Use Case |
+|--------|----------|----------|
+| `strict` | Block on any schema change | Gold layer, regulated data |
+| `additive_only` | Allow new columns, block removals/type changes | Silver layer (default) |
+| `permissive` | Log drift but never block | Bronze layer, exploratory |
+
+### Alert Channels
+
+- **log**: Log to notebook/stdout (default)
+- **webhook**: Send to Slack or Microsoft Teams
+- **email**: Send via SMTP (requires configuration)
+- **all**: Use all configured channels
+
+### Monitoring Table
+
+All drift events are logged to `{catalog}.monitoring.schema_drift_log`:
+
+```sql
+SELECT * FROM workspace.monitoring.schema_drift_log
+ORDER BY detected_at DESC
+LIMIT 10;
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/AlekseyBanaev/databricks-lab.git
-git branch -M main
-git push -uf origin main
+
+### Notebook Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `MONITORING_SCHEMA` | `monitoring` | Schema for drift log table |
+| `SCHEMA_POLICY` | `additive_only` | Validation policy |
+| `ALERT_CHANNEL` | `log` | Alert delivery method |
+| `WEBHOOK_URL` | (empty) | Slack/Teams webhook URL |
+
+### Example: Configure Slack Alerts
+
+```bash
+# Run Silver notebook with Slack alerts
+dbutils.widgets.set("SCHEMA_POLICY", "additive_only")
+dbutils.widgets.set("ALERT_CHANNEL", "webhook")
+dbutils.widgets.set("WEBHOOK_URL", "https://hooks.slack.com/services/XXX/YYY/ZZZ")
 ```
 
-## Integrate with your tools
+### Severity Levels
 
-* [Set up project integrations](https://gitlab.com/AlekseyBanaev/databricks-lab/-/settings/integrations)
+| Severity | Trigger | Action |
+|----------|---------|--------|
+| `NONE` | No drift detected | None |
+| `WARNING` | Additive changes only | Log + alert |
+| `CRITICAL` | Removed columns or type changes | Block pipeline + alert |
 
-## Collaborate with your team
+## Migrating Existing Deployments
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+If you have an existing deployment with the old `product TEXT` column, run the migration script:
 
-## Test and Deploy
+```bash
+psql -h localhost -U postgres -d demo -f migrate_schema.sql
+```
 
-Use the built-in continuous integration in GitLab.
+This script:
+1. Adds a `product_id` column
+2. Maps existing product names to product IDs
+3. Drops the old `product` column
+4. Adds a foreign key constraint
+5. Creates an index for join performance
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+**Warning**: Run only after products exist and product names match order values.
 
-***
+## Local Infrastructure
 
-# Editing this README
+Start the local stack:
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+```bash
+docker compose up -d
+```
 
-## Suggestions for a good README
+Register the connector after Kafka Connect is ready:
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+```bash
+curl -X POST http://localhost:8083/connectors   -H 'Content-Type: application/json'   --data @postgres-connector.json
+```
 
-## Name
-Choose a self-explaining name for your project.
+Kafka is configured with two listeners:
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+- `kafka:9092` for other containers in Docker
+- `${KAFKA_EXTERNAL_HOST:-localhost}:${KAFKA_EXTERNAL_PORT:-9093}` for host or remote clients
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+If Databricks needs to reach Kafka from outside your machine, set `KAFKA_EXTERNAL_HOST` and `KAFKA_EXTERNAL_PORT` before starting Compose.
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+## Source Data Generators
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+Install the local Python dependency:
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+```bash
+python3 -m pip install -r requirements.txt
+```
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+Run the generators:
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+```bash
+python3 generators/load_generator.py
+python3 generators/load_products_generator.py
+```
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+Optional environment variables:
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+- `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`
+- `ITERATIONS` to stop after a fixed number of mutations
+- `SLEEP_MIN`, `SLEEP_MAX` to control event cadence
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+## Databricks Runtime Expectations
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+Create or grant access to a Unity Catalog catalog named `workspace`, or pass another catalog name through notebook parameters.
 
-## License
-For open source projects, say how it is licensed.
+Bronze notebook parameters:
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+- `KAFKA_BOOTSTRAP`: reachable Kafka bootstrap, for example `broker.example.com:9093`
+- `TOPIC_PATTERN`: defaults to `cdc.public.*`
+- `CATALOG`: defaults to `workspace`
+- `BRONZE_SCHEMA`: defaults to `bronze`
+- `CHECKPOINT_PATH`: Delta checkpoint path for Bronze ingestion
+
+Silver notebook parameters:
+
+- `CATALOG`: defaults to `workspace`
+- `BRONZE_SCHEMA`: defaults to `bronze`
+- `BRONZE_TABLE`: defaults to `orders`
+- `SILVER_SCHEMA`: defaults to `silver`
+- `SILVER_TABLE`: defaults to `silver_orders`
+- `CHECKPOINT_PATH`: Delta checkpoint path for Silver processing
+
+## dbt Gold Layer
+
+The dbt project in `cdc_gold/` builds two Gold models:
+
+**gold_products**
+- Current-state product dimension with weight classification
+- Source: `silver.silver_products`
+
+**gold_orders**
+- Current-state orders fact table with denormalized product name
+- Foreign key relationship to `gold_products`
+- Price band classification (low/medium/high)
+- Source: `silver.silver_orders`
+
+Typical commands:
+
+```bash
+cd cdc_gold
+dbt debug
+dbt build
+```
+
+Both models are incremental and include data quality tests for NOT NULL, UNIQUE, and referential integrity.
