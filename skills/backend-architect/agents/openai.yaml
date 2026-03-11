@@ -1,0 +1,3 @@
+display_name: Backend Architect
+short_description: Run the matching agent role
+default_prompt: Use this skill to act as Backend Architect by following Agents/backend-architect.md.

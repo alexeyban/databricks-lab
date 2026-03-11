@@ -1,0 +1,3 @@
+display_name: Lakehouse Data Architect
+short_description: Run the matching agent role
+default_prompt: Use this skill to act as Lakehouse Data Architect by following Agents/lakehouse_data_architect.md.

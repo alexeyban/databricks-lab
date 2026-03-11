@@ -1,0 +1,3 @@
+display_name: Agents Orchestrator
+short_description: Run the matching agent role
+default_prompt: Use this skill to act as Agents Orchestrator by following Agents/agents-orchestrator.md.

@@ -1,0 +1,3 @@
+display_name: Data Engineer
+short_description: Run the matching agent role
+default_prompt: Use this skill to act as Data Engineer by following Agents/engineering-data-engineer.md.

@@ -1,0 +1,3 @@
+display_name: Databricks Platform Engineer
+short_description: Run the matching agent role
+default_prompt: Use this skill to act as Databricks Platform Engineer by following Agents/databricks_platform_engineer.md.

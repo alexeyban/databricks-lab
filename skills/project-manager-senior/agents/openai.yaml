@@ -1,0 +1,3 @@
+display_name: Senior Project Manager
+short_description: Run the matching agent role
+default_prompt: Use this skill to act as Senior Project Manager by following Agents/project-manager-senior.md.

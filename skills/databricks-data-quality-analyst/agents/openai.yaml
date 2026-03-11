@@ -1,0 +1,3 @@
+display_name: databricks-data-quality-analyst
+short_description: Run the matching agent role
+default_prompt: Use this skill to act as databricks-data-quality-analyst by following Agents/databricks-data-quality-analyst.md.

@@ -1,0 +1,3 @@
+display_name: Frontend Developer
+short_description: Run the matching agent role
+default_prompt: Use this skill to act as Frontend Developer by following Agents/frontend-developer.md.

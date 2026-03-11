@@ -1,0 +1,3 @@
+display_name: Spark Performance Engineer
+short_description: Run the matching agent role
+default_prompt: Use this skill to act as Spark Performance Engineer by following Agents/spark_performance_engineer.md.

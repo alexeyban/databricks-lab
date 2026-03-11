@@ -1,0 +1,3 @@
+display_name: Docker Databricks Lab Ops
+short_description: Run local CDC lab ops
+default_prompt: Use this skill to start the local Docker CDC lab, run the load generators, launch a Databricks notebook job, and verify the notebooks completed successfully.

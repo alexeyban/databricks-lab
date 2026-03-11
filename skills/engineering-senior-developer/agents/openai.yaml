@@ -1,0 +1,3 @@
+display_name: engineering-senior-developer
+short_description: Run the matching agent role
+default_prompt: Use this skill to act as engineering-senior-developer by following Agents/engineering-senior-developer.md.

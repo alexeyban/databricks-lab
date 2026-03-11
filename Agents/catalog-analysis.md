@@ -33,6 +33,12 @@ The `Agents` catalog now contains implemented files for the core orchestration p
 - `Databricks Platform Engineer`
 - `Lakehouse Data Architect`
 - `Spark Performance Engineer`
+- `databricks-notebook-publisher`
+- `databricks-job-operator`
+- `databricks-notebook-remediator`
+- `databricks-data-quality-analyst`
+- `databricks-notebook-algorithm-auditor`
+- `drawio-architecture-architect`
 
 ## Normalization Performed
 
@@ -54,6 +60,18 @@ The orchestrator still lists additional roles that do not yet have dedicated fil
 - `Support Responder`
 - `API Tester`
 - `Performance Benchmarker`
+
+## Databricks Delivery Coverage Added
+
+The catalog now explicitly covers the full Databricks notebook lifecycle requested for orchestration:
+
+1. Draw.io architecture creation from overview to implementation detail
+2. Notebook publication to Databricks via `databricks.sdk`
+3. Notebook execution through Databricks Jobs
+4. Run monitoring and terminal state capture
+5. Failure analysis and notebook remediation
+6. Data quality validation and reporting
+7. Notebook logic and algorithm assessment reporting
 
 ## Recommended Next Step
 

@@ -1,0 +1,3 @@
+display_name: testing-reality-checker
+short_description: Run the matching agent role
+default_prompt: Use this skill to act as testing-reality-checker by following Agents/testing-reality-checker.md.

@@ -1,0 +1,3 @@
+display_name: DevOps Automator
+short_description: Run the matching agent role
+default_prompt: Use this skill to act as DevOps Automator by following Agents/engineering-devops-automator.md.

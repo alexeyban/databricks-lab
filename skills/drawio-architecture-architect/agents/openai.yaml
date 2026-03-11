@@ -1,0 +1,3 @@
+display_name: drawio-architecture-architect
+short_description: Run the matching agent role
+default_prompt: Use this skill to act as drawio-architecture-architect by following Agents/drawio-architecture-architect.md.

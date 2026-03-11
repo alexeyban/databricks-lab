@@ -1,0 +1,3 @@
+display_name: databricks-notebook-publisher
+short_description: Run the matching agent role
+default_prompt: Use this skill to act as databricks-notebook-publisher by following Agents/databricks-notebook-publisher.md.
