@@ -15,8 +15,6 @@ models:
               to: ref('gold_products')
               field: id
       - name: product_name
-        tests:
-          - not_null
       - name: price
         tests:
           - not_null

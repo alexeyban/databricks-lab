@@ -9,7 +9,7 @@ with source_orders as (
     select
         id,
         product_id,
-        product_name,
+        product_legacy,
         cast(price as decimal(12,2)) as price,
         cast(created_at as timestamp) as created_at,
         cast(last_inserted_dt as timestamp) as last_inserted_dt,
@@ -18,22 +18,32 @@ with source_orders as (
     where product_id is not null
 ),
 
-prepared as (
+source_products as (
     select
         id,
-        product_id,
         product_name,
-        price,
+        cast(updated_at as timestamp) as product_updated_at
+    from {{ source('silver', 'silver_products') }}
+),
+
+prepared as (
+    select
+        o.id,
+        o.product_id,
+        coalesce(p.product_name, o.product_legacy) as product_name,
+        o.price,
         case
-            when price < 20 then 'low'
-            when price < 60 then 'medium'
+            when o.price < 20 then 'low'
+            when o.price < 60 then 'medium'
             else 'high'
         end as price_band,
-        created_at,
-        cast(created_at as date) as order_date,
-        last_inserted_dt,
-        last_updated_dt
-    from source_orders
+        o.created_at,
+        cast(o.created_at as date) as order_date,
+        o.last_inserted_dt,
+        greatest(o.last_updated_dt, coalesce(p.product_updated_at, o.last_updated_dt)) as last_updated_dt
+    from source_orders o
+    left join source_products p
+      on o.product_id = p.id
 )
 
 select *

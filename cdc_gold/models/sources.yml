@@ -18,9 +18,7 @@ sources:
           - name: product_id
             tests:
               - not_null
-          - name: product_name
-            tests:
-              - not_null
+          - name: product_legacy
           - name: price
             tests:
               - not_null

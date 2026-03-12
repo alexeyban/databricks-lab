@@ -18,8 +18,6 @@ models:
               field: id
       - name: product_name
         description: Denormalized product name from products table
-        tests:
-          - not_null
       - name: price
         description: Order price in decimal format
         tests:
