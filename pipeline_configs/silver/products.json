@@ -1,0 +1,44 @@
+{
+  "table_id": "products",
+  "enabled": true,
+  "bronze_table": "products",
+  "silver_table": "silver_products",
+  "cdc_contract_key": "cdc.products",
+  "silver_contract_key": "silver.products",
+  "checkpoint_name": "products_silver_generic",
+  "primary_keys": ["id"],
+  "dedupe_order_columns": ["event_time", "event_ts_ms", "bronze_offset"],
+  "merge_core_fields": ["id", "product_name", "weight", "color", "created_at", "updated_at"],
+  "bootstrap_hook": null,
+  "field_mappings": [
+    {
+      "target": "id",
+      "source_paths": ["after.id", "before.id"]
+    },
+    {
+      "target": "product_name",
+      "source_paths": ["after.product_name", "before.product_name"]
+    },
+    {
+      "target": "weight",
+      "transform": "decimal_from_debezium_bytes",
+      "source_paths": ["after.weight", "before.weight"],
+      "precision": 10,
+      "scale": 2
+    },
+    {
+      "target": "color",
+      "source_paths": ["after.color", "before.color"]
+    },
+    {
+      "target": "created_at",
+      "transform": "epoch_micros_to_timestamp",
+      "source_paths": ["after.created_at", "before.created_at"]
+    },
+    {
+      "target": "updated_at",
+      "transform": "epoch_micros_to_timestamp",
+      "source_paths": ["after.updated_at", "before.updated_at"]
+    }
+  ]
+}

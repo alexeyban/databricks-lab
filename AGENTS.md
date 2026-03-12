@@ -18,6 +18,8 @@ No extra Cursor or Copilot rules were found, so follow this file and nearby code
 - `generators/`: PostgreSQL data mutation generators
 - `Agents/`: local specialist agent definitions and role prompts
 - `skills/`: local skill activators and repo-specific operational workflows
+- `pipeline_configs/silver/`: per-table JSON configs for generic Silver pipelines
+- `dq_queries/silver/`: stored SQL data quality checks executed after Silver updates
 - `skills/docker-databricks-lab-ops/scripts/`: operational smoke-test scripts
 - `cdc_gold/`: dbt project for Gold-layer models and tests
 - `docker-compose.yml`: local Postgres/Kafka/Debezium stack
@@ -39,6 +41,7 @@ This repo includes a local agent/skill catalog. Use it as part of normal work.
 - `Agents/databricks-job-operator.md`: run jobs, capture `run_id`, and track terminal state
 - `Agents/databricks-notebook-remediator.md`: diagnose failed notebook runs and fix forward
 - `Agents/databricks-data-quality-analyst.md`: validate output quality beyond job success
+- `Agents/databricks-dq-automation.md`: run stored SQL DQ checks after pipeline changes
 - `Agents/spark_performance_engineer.md`: Spark tuning and execution-performance review
 - `Agents/evidenceqa.md` and `Agents/testing-reality-checker.md`: evidence-based QA and final readiness checks
 
@@ -50,12 +53,14 @@ This repo includes a local agent/skill catalog. Use it as part of normal work.
 - `skills/databricks-job-operator/`: use when executing and monitoring Databricks jobs
 - `skills/databricks-notebook-remediator/`: use when Databricks runs fail
 - `skills/databricks-data-quality-analyst/`: use when validating table or notebook outputs
+- `skills/databricks-dq-automation/`: run repo-managed SQL checks in `dq_queries/silver/` after pipeline updates
 - `skills/testing-reality-checker/`: use for final confidence checks before calling work done
 
 ### Recommended Sequencing
 - Delivery flow: `engineering-data-engineer` -> `databricks-notebook-publisher` -> `databricks-job-operator`
 - Failure flow: `databricks-job-operator` -> `databricks-notebook-remediator` -> `databricks-job-operator`
 - Validation flow: `databricks-data-quality-analyst` -> `testing-reality-checker`
+- Automated DQ flow: `databricks-dq-automation` after successful Silver or workflow updates
 - End-to-end ops flow: consult `skills/docker-databricks-lab-ops/` first
 
 ### Notes

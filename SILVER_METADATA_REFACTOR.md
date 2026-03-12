@@ -23,16 +23,17 @@ Databricks Workflow job.
 
 Introduce a universal Silver runtime made of:
 
-1. a metadata registry describing each source table
+1. a metadata registry describing each source table in `pipeline_configs/silver/*.json`
 2. a generic Bronze-to-Silver notebook driven by `TABLE_ID`
 3. a fan-out Databricks Workflow that runs one generic Silver task per table
+4. automated SQL DQ checks from `dq_queries/silver/` after each update
 
 ## Target Architecture
 
 ### Shared Runtime
 
 - `notebooks/helpers/NB_silver_metadata.ipynb`
-  - registry of Silver table configs
+  - loads Silver table configs from `pipeline_configs/silver/*.json`
   - metadata access helpers
   - target-table creation from schema contracts
   - optional one-time bootstrap hooks for legacy migration cases
@@ -138,6 +139,10 @@ Example shape:
 - `notebooks/helpers/NB_silver_metadata.ipynb`
 - `notebooks/silver/NB_process_to_silver_generic.ipynb`
 - `Orders-ingest-job.yaml`
+- `pipeline_configs/silver/orders.json`
+- `pipeline_configs/silver/products.json`
+- `dq_queries/silver/orders.sql`
+- `dq_queries/silver/products.sql`
 
 ## Cutover Recommendation
 

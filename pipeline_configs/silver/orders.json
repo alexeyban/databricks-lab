@@ -1,0 +1,49 @@
+{
+  "table_id": "orders",
+  "enabled": true,
+  "bronze_table": "orders",
+  "silver_table": "silver_orders",
+  "cdc_contract_key": "cdc.orders",
+  "silver_contract_key": "silver.orders",
+  "checkpoint_name": "orders_silver_generic",
+  "primary_keys": ["id"],
+  "dedupe_order_columns": ["event_time", "event_ts_ms", "bronze_offset"],
+  "merge_core_fields": ["id", "product_id", "product_legacy", "price", "created_at"],
+  "bootstrap_hook": "reconcile_orders_legacy",
+  "field_mappings": [
+    {
+      "target": "id",
+      "source_paths": ["after.id", "before.id"]
+    },
+    {
+      "target": "product_id",
+      "source_paths": ["after.product_id", "before.product_id"]
+    },
+    {
+      "target": "product_legacy",
+      "source_paths": ["after.product_name", "before.product_name"]
+    },
+    {
+      "target": "price",
+      "transform": "decimal_from_json_paths",
+      "json_value_paths": [
+        "$.payload.after.price.value",
+        "$.payload.before.price.value",
+        "$.payload.after.price",
+        "$.payload.before.price"
+      ],
+      "json_scale_paths": [
+        "$.payload.after.price.scale",
+        "$.payload.before.price.scale"
+      ],
+      "default_scale": 2,
+      "precision": 12,
+      "scale": 2
+    },
+    {
+      "target": "created_at",
+      "transform": "epoch_micros_to_timestamp",
+      "source_paths": ["after.created_at", "before.created_at"]
+    }
+  ]
+}

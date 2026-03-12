@@ -35,6 +35,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--orders-iterations", type=int, default=12)
     parser.add_argument("--poll-seconds", type=int, default=15)
     parser.add_argument("--timeout-seconds", type=int, default=1800)
+    parser.add_argument("--catalog", default="workspace")
+    parser.add_argument("--silver-schema", default="silver")
+    parser.add_argument("--warehouse-id", default="53165753164ae80e")
+    parser.add_argument("--skip-dq", action="store_true")
     return parser.parse_args()
 
 
@@ -265,6 +269,22 @@ def run_ingest_job(
     return wait_for_run(client, run.run_id, poll_seconds, timeout_seconds)
 
 
+def run_silver_dq(catalog: str, silver_schema: str, warehouse_id: str) -> dict:
+    result = run_cmd(
+        [
+            "python3",
+            "skills/databricks-dq-automation/scripts/run_silver_dq.py",
+            "--catalog",
+            catalog,
+            "--silver-schema",
+            silver_schema,
+            "--warehouse-id",
+            warehouse_id,
+        ]
+    )
+    return json.loads(result.stdout)
+
+
 def main() -> int:
     args = parse_args()
     normalized = normalize_notebooks()
@@ -298,6 +318,14 @@ def main() -> int:
         timeout_seconds=args.timeout_seconds,
     )
 
+    dq_report = None
+    if ingest_run["result_state"] == "SUCCESS" and not args.skip_dq:
+        dq_report = run_silver_dq(
+            catalog=args.catalog,
+            silver_schema=args.silver_schema,
+            warehouse_id=args.warehouse_id,
+        )
+
     output = {
         "normalized_notebooks": normalized,
         "ngrok": {
@@ -310,10 +338,13 @@ def main() -> int:
             "orders_iterations": args.orders_iterations,
         },
         "ingest_job_run": ingest_run,
+        "dq_report": dq_report,
     }
     print(json.dumps(output, indent=2, default=str))
 
     success = ingest_run["result_state"] == "SUCCESS"
+    if dq_report is not None:
+        success = success and dq_report["passed"]
     return 0 if success else 1
 
 
