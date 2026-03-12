@@ -1,0 +1,18 @@
+version: 2
+
+models:
+  - name: total_products_order
+    description: Gold aggregate of total order amount by product name and color.
+    columns:
+      - name: product_name
+        description: Product name from the Silver products table.
+        tests:
+          - not_null
+      - name: color
+        description: Product color from the Silver products table.
+        tests:
+          - not_null
+      - name: total_amount
+        description: Sum of order prices for each product and color combination.
+        tests:
+          - not_null

@@ -3,10 +3,11 @@ version: 2
 sources:
   - name: silver
     schema: silver
-    loaded_at_field: last_updated_dt
-    freshness:
-      warn_after: {count: 30, period: minute}
-      error_after: {count: 2, period: hour}
+    config:
+      loaded_at_field: last_updated_dt
+      freshness:
+        warn_after: {count: 30, period: minute}
+        error_after: {count: 2, period: hour}
     tables:
       - name: silver_orders
         description: Current-state orders table produced by the Silver Databricks streaming merge.
@@ -33,5 +34,8 @@ sources:
               - not_null
               - unique
           - name: product_name
+            tests:
+              - not_null
+          - name: color
             tests:
               - not_null

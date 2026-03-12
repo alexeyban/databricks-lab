@@ -75,6 +75,12 @@ This repo includes a local agent/skill catalog. Use it as part of normal work.
   - `cp .envexample .env`
 - Do not commit `.env`, `.databrickscfg`, or generated logs.
 
+## Session Logging
+- Use `OPENCODE_LOG.md` as the local handoff and activity log for repository work.
+- At the start of every OpenCode session, read `OPENCODE_LOG.md` first and use it to restore prior context before making changes.
+- During meaningful work, append concise entries covering what changed, what was validated, what failed, and any active follow-up items.
+- Keep entries factual and scannable so the next session can resume quickly.
+
 ## Build / Run Commands
 There is no top-level `Makefile`, `tox`, `nox`, or other unified task runner.
 Use the native commands below.
@@ -137,9 +143,9 @@ There is no formal `pytest` or `unittest` suite configured today.
 
 ### dbt
 - Test one model:
-  - `cd cdc_gold && dbt test --select gold_orders`
+  - `cd cdc_gold && dbt test --select total_products_order`
 - Build and test one model:
-  - `cd cdc_gold && dbt build --select gold_orders`
+  - `cd cdc_gold && dbt build --select total_products_order`
 - Target a narrower selector when debugging source/model issues:
   - `cd cdc_gold && dbt test --select source:*`
 If a Python test runner is added later, document both single-file and single-test-name commands here.

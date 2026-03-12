@@ -50,6 +50,23 @@ resources:
           email_notifications: {}
           webhook_notifications: {}
           environment_key: Default
+        - task_key: gold_dbt_build
+          depends_on:
+            - task_key: silver_products_generic
+            - task_key: silver_orders_generic
+          run_if: ALL_SUCCESS
+          dbt_task:
+            source: WORKSPACE
+            project_directory: /Users/alexeyban@gmail.com/opncodetest/cdc_gold
+            warehouse_id: 53165753164ae80e
+            catalog: workspace
+            schema: gold
+            commands:
+              - dbt build --select total_products_order
+          timeout_seconds: 0
+          email_notifications: {}
+          webhook_notifications: {}
+          environment_key: Default
       git_source:
         git_url: https://github.com/alexeyban/databricks-lab
         git_provider: gitHub
@@ -60,4 +77,7 @@ resources:
         - environment_key: Default
           spec:
             environment_version: "4"
+            dependencies:
+              - dbt-core>=1.0.0,<2.0.0
+              - dbt-databricks>=1.0.0,<2.0.0
       performance_target: PERFORMANCE_OPTIMIZED

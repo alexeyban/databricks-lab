@@ -8,7 +8,7 @@ Agent-system inspiration for this repository was borrowed from [agency-agents](h
 - Debezium captures WAL changes and publishes them to Kafka topics with the `cdc` prefix
 - A Databricks Bronze notebook ingests raw Kafka events into Delta tables per source table
 - A Databricks Silver notebook normalizes Debezium envelopes into current-state Delta tables with **schema evolution support**
-- dbt builds a Gold presentation model with foreign key relationships and data quality tests
+- dbt builds a Gold presentation model with aggregate business metrics and data quality tests
 
 ## Schema Design
 
@@ -33,7 +33,7 @@ Agent-system inspiration for this repository was borrowed from [agency-agents](h
 |-------|-------|-------------|
 | Bronze | `bronze.orders`, `bronze.products` | Raw Debezium CDC events |
 | Silver | `silver.silver_orders`, `silver.silver_products` | Current-state with schema evolution |
-| Gold | `gold.gold_orders`, `gold.gold_products` | Business-ready with denormalization |
+| Gold | `gold.total_products_order` | Business-ready aggregate by product and color |
 
 ## Repository Layout
 
@@ -48,9 +48,14 @@ Agent-system inspiration for this repository was borrowed from [agency-agents](h
   - `NB_catalog_helpers.ipynb`: Schema/table creation utilities
   - `NB_schema_drift_helpers.ipynb`: Schema drift detection and alerting
   - `NB_schema_contracts.ipynb`: Expected schema contracts for all layers
-- `Orders-ingest-job.yaml`: Databricks job definition for Bronze and Silver processing
+- `Orders-ingest-job.yaml`: Databricks job definition for Bronze, Silver, and Gold dbt processing
 - `databricks-lab-architecture.drawio`: editable architecture diagram with overview and detailed pages
-- `cdc_gold/`: dbt project for Gold models with referential integrity tests
+- `cdc_gold/`: dbt project for Gold models and aggregate-level data quality tests
+- `OPENCODE_LOG.md`: local OpenCode session log and handoff file
+
+## OpenCode Session Log
+
+OpenCode should read `OPENCODE_LOG.md` at the start of each session, use it to restore context, and append a short activity entry for meaningful work.
 
 ## End-to-End Flow
 
@@ -68,7 +73,7 @@ Agent-system inspiration for this repository was borrowed from [agency-agents](h
 6. Run the Silver notebooks:
    - `NB_process_to_silver.ipynb` for orders
    - `NB_process_products_silver.ipynb` for products
-7. Run dbt in `cdc_gold/` to build the Gold layer with referential integrity.
+7. Run dbt in `cdc_gold/` to build and test the Gold layer aggregate.
 
 ## Schema Evolution
 
@@ -196,7 +201,7 @@ docker compose up -d
 
 When you run the Databricks job or notebooks, pass the current tunnel endpoint as `KAFKA_BOOTSTRAP` instead of hardcoding it permanently into the repository, because `ngrok` values change after restart.
 
-For the full automated flow, use:
+For the full automated flow, including Silver checks, dbt Gold build, and Gold output verification, use:
 
 ```bash
 python3 skills/docker-databricks-lab-ops/scripts/smoke_test_notebooks.py
@@ -260,17 +265,11 @@ Silver notebook parameters:
 
 ## dbt Gold Layer
 
-The dbt project in `cdc_gold/` builds two Gold models:
+The dbt project in `cdc_gold/` builds one Gold model:
 
-**gold_products**
-- Current-state product dimension with weight classification
-- Source: `silver.silver_products`
-
-**gold_orders**
-- Current-state orders fact table with denormalized product name
-- Foreign key relationship to `gold_products`
-- Price band classification (low/medium/high)
-- Source: `silver.silver_orders`
+**total_products_order**
+- Aggregate total order amount by product name and color
+- Sources: `silver.silver_orders`, `silver.silver_products`
 
 Typical commands:
 
@@ -280,4 +279,4 @@ dbt debug
 dbt build
 ```
 
-Both models are incremental and include data quality tests for NOT NULL, UNIQUE, and referential integrity.
+The model includes data quality tests for NOT NULL columns and depends on validated Silver sources.

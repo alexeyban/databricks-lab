@@ -16,4 +16,3 @@ clean-targets:
 models:
   cdc_gold:
     +materialized: table
-    +schema: gold

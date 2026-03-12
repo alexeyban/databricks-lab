@@ -37,8 +37,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout-seconds", type=int, default=1800)
     parser.add_argument("--catalog", default="workspace")
     parser.add_argument("--silver-schema", default="silver")
+    parser.add_argument("--gold-schema", default="gold")
     parser.add_argument("--warehouse-id", default="53165753164ae80e")
     parser.add_argument("--skip-dq", action="store_true")
+    parser.add_argument("--skip-dbt", action="store_true")
+    parser.add_argument("--reuse-existing-infra", action="store_true")
     return parser.parse_args()
 
 
@@ -203,6 +206,21 @@ def register_connector() -> str:
         raise
 
 
+def ensure_local_stack(args: argparse.Namespace, kafka_bootstrap: str) -> str | None:
+    if args.reuse_existing_infra:
+        wait_for_connect()
+        return "reused-existing"
+
+    host, port = kafka_bootstrap.split(":", 1)
+    compose_env = os.environ.copy() | {
+        "KAFKA_EXTERNAL_HOST": host,
+        "KAFKA_EXTERNAL_PORT": port,
+    }
+    run_cmd(["docker", "compose", "up", "-d"], env=compose_env, capture_output=False)
+    wait_for_connect()
+    return "started-compose"
+
+
 def run_generators(products_iterations: int, orders_iterations: int) -> None:
     env = os.environ.copy()
     run_cmd(
@@ -285,6 +303,36 @@ def run_silver_dq(catalog: str, silver_schema: str, warehouse_id: str) -> dict:
     return json.loads(result.stdout)
 
 
+def run_dbt_gold(select: str | None = None) -> dict:
+    cmd = [
+        "python3",
+        "skills/docker-databricks-lab-ops/scripts/run_dbt_gold.py",
+        "--project-dir",
+        "cdc_gold",
+    ]
+    if select:
+        cmd.extend(["--select", select])
+
+    result = run_cmd(cmd)
+    return {
+        "command": cmd,
+        "returncode": result.returncode,
+        "stdout": result.stdout,
+        "stderr": result.stderr,
+    }
+
+
+def verify_gold_output(catalog: str, gold_schema: str) -> dict:
+    row_count = psql(
+        f"SELECT COUNT(*) FROM {catalog}.{gold_schema}.total_products_order"
+    )
+    return {
+        "relation": f"{catalog}.{gold_schema}.total_products_order",
+        "row_count": int(row_count),
+        "passed": int(row_count) > 0,
+    }
+
+
 def main() -> int:
     args = parse_args()
     normalized = normalize_notebooks()
@@ -296,16 +344,9 @@ def main() -> int:
         log_path=REPO_ROOT / "logs" / "ngrok-kafka.log",
     )
     kafka_bootstrap = tunnel["public_url"].removeprefix("tcp://")
-    host, port = kafka_bootstrap.split(":", 1)
-
-    compose_env = os.environ.copy() | {
-        "KAFKA_EXTERNAL_HOST": host,
-        "KAFKA_EXTERNAL_PORT": port,
-    }
-    run_cmd(["docker", "compose", "up", "-d"], env=compose_env, capture_output=False)
+    infra_mode = ensure_local_stack(args, kafka_bootstrap)
 
     ensure_source_schema()
-    wait_for_connect()
     connector_status = register_connector()
     run_generators(args.products_iterations, args.orders_iterations)
 
@@ -326,6 +367,16 @@ def main() -> int:
             warehouse_id=args.warehouse_id,
         )
 
+    dbt_report = None
+    gold_verification = None
+    if ingest_run["result_state"] == "SUCCESS" and not args.skip_dbt:
+        dbt_report = run_dbt_gold(select="total_products_order")
+        if dbt_report["returncode"] == 0:
+            gold_verification = verify_gold_output(
+                catalog=args.catalog,
+                gold_schema=args.gold_schema,
+            )
+
     output = {
         "normalized_notebooks": normalized,
         "ngrok": {
@@ -333,18 +384,25 @@ def main() -> int:
             "kafka_bootstrap": kafka_bootstrap,
         },
         "connector_status": connector_status,
+        "infra_mode": infra_mode,
         "load_generation": {
             "products_iterations": args.products_iterations,
             "orders_iterations": args.orders_iterations,
         },
         "ingest_job_run": ingest_run,
         "dq_report": dq_report,
+        "dbt_report": dbt_report,
+        "gold_verification": gold_verification,
     }
     print(json.dumps(output, indent=2, default=str))
 
     success = ingest_run["result_state"] == "SUCCESS"
     if dq_report is not None:
         success = success and dq_report["passed"]
+    if dbt_report is not None:
+        success = success and dbt_report["returncode"] == 0
+    if gold_verification is not None:
+        success = success and gold_verification["passed"]
     return 0 if success else 1
 
 
