@@ -10,17 +10,6 @@ import urllib.request
 from pathlib import Path
 
 from databricks.sdk import WorkspaceClient
-from databricks.sdk.service.compute import Environment
-from databricks.sdk.service.jobs import (
-    GitProvider,
-    GitSource,
-    JobEnvironment,
-    NotebookTask,
-    QueueSettings,
-    Source,
-    SubmitTask,
-)
-
 from prepare_ngrok_kafka import ensure_tunnel
 
 
@@ -30,9 +19,10 @@ DEFAULT_JOB_ID = 574281734474239
 NOTEBOOKS_TO_NORMALIZE = [
     "notebooks/bronze/NB_ingest_to_bronze.ipynb",
     "notebooks/helpers/NB_catalog_helpers.ipynb",
+    "notebooks/helpers/NB_silver_metadata.ipynb",
     "notebooks/helpers/NB_schema_contracts.ipynb",
     "notebooks/helpers/NB_schema_drift_helpers.ipynb",
-    "notebooks/silver/NB_process_products_silver.ipynb",
+    "notebooks/silver/NB_process_to_silver_generic.ipynb",
     "notebooks/silver/NB_process_to_silver.ipynb",
 ]
 
@@ -45,9 +35,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--orders-iterations", type=int, default=12)
     parser.add_argument("--poll-seconds", type=int, default=15)
     parser.add_argument("--timeout-seconds", type=int, default=1800)
-    parser.add_argument("--catalog", default="workspace")
-    parser.add_argument("--git-branch", default="main")
-    parser.add_argument("--skip-products-silver", action="store_true")
     return parser.parse_args()
 
 
@@ -55,7 +42,9 @@ def enum_value(value):
     return getattr(value, "value", value)
 
 
-def run_cmd(cmd: list[str], *, env: dict | None = None, capture_output: bool = True) -> subprocess.CompletedProcess:
+def run_cmd(
+    cmd: list[str], *, env: dict | None = None, capture_output: bool = True
+) -> subprocess.CompletedProcess:
     return subprocess.run(
         cmd,
         cwd=REPO_ROOT,
@@ -114,7 +103,14 @@ def ensure_source_schema() -> None:
         env=env,
     )
 
-    columns = set(filter(None, psql("SELECT column_name FROM information_schema.columns WHERE table_name = 'orders'").splitlines()))
+    columns = set(
+        filter(
+            None,
+            psql(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'orders'"
+            ).splitlines(),
+        )
+    )
     if "product" not in columns:
         return
 
@@ -143,7 +139,9 @@ def ensure_source_schema() -> None:
     )
     unmapped = psql("SELECT COUNT(*) FROM orders WHERE product_id IS NULL")
     if unmapped != "0":
-        raise RuntimeError(f"Source schema repair failed, {unmapped} orders still have NULL product_id")
+        raise RuntimeError(
+            f"Source schema repair failed, {unmapped} orders still have NULL product_id"
+        )
 
     psql("ALTER TABLE orders ALTER COLUMN product_id SET NOT NULL")
     has_fk = psql(
@@ -183,7 +181,9 @@ def wait_for_connect(timeout_seconds: int = 60) -> None:
 
 
 def register_connector() -> str:
-    connector_config = (REPO_ROOT / "postgres-connector.json").read_text().encode("utf-8")
+    connector_config = (
+        (REPO_ROOT / "postgres-connector.json").read_text().encode("utf-8")
+    )
     request = urllib.request.Request(
         CONNECT_URL,
         data=connector_config,
@@ -219,24 +219,31 @@ def build_client() -> WorkspaceClient:
     return WorkspaceClient(host=host, token=token)
 
 
-def wait_for_run(client: WorkspaceClient, run_id: int, poll_seconds: int, timeout_seconds: int) -> dict:
+def wait_for_run(
+    client: WorkspaceClient, run_id: int, poll_seconds: int, timeout_seconds: int
+) -> dict:
     deadline = time.time() + timeout_seconds
     while time.time() < deadline:
         run = client.jobs.get_run(run_id=run_id)
-        life_cycle_state = enum_value(run.state.life_cycle_state)
+        run_state = run.state
+        life_cycle_state = enum_value(getattr(run_state, "life_cycle_state", None))
         if life_cycle_state in {"TERMINATED", "SKIPPED", "INTERNAL_ERROR", "BLOCKED"}:
             return {
                 "run_id": run_id,
                 "life_cycle_state": life_cycle_state,
-                "result_state": enum_value(run.state.result_state),
-                "state_message": run.state.state_message,
+                "result_state": enum_value(getattr(run_state, "result_state", None)),
+                "state_message": getattr(run_state, "state_message", None),
                 "tasks": [
                     {
                         "task_key": task.task_key,
                         "run_id": task.run_id,
-                        "life_cycle_state": enum_value(task.state.life_cycle_state),
-                        "result_state": enum_value(task.state.result_state),
-                        "state_message": task.state.state_message,
+                        "life_cycle_state": enum_value(
+                            getattr(task.state, "life_cycle_state", None)
+                        ),
+                        "result_state": enum_value(
+                            getattr(task.state, "result_state", None)
+                        ),
+                        "state_message": getattr(task.state, "state_message", None),
                     }
                     for task in (run.tasks or [])
                 ],
@@ -245,41 +252,17 @@ def wait_for_run(client: WorkspaceClient, run_id: int, poll_seconds: int, timeou
     raise TimeoutError(f"Run {run_id} did not finish within {timeout_seconds} seconds")
 
 
-def run_orders_job(client: WorkspaceClient, job_id: int, kafka_bootstrap: str, poll_seconds: int, timeout_seconds: int) -> dict:
-    run = client.jobs.run_now(job_id=job_id, notebook_params={"KAFKA_BOOTSTRAP": kafka_bootstrap})
-    return wait_for_run(client, run.run_id, poll_seconds, timeout_seconds)
-
-
-def run_products_silver(client: WorkspaceClient, catalog: str, git_branch: str, poll_seconds: int, timeout_seconds: int) -> dict:
-    submitted = client.jobs.submit(
-        run_name="smoke-test-products-silver",
-        git_source=GitSource(
-            git_url="https://github.com/alexeyban/databricks-lab",
-            git_provider=GitProvider.GIT_HUB,
-            git_branch=git_branch,
-        ),
-        environments=[JobEnvironment(environment_key="Default", spec=Environment(environment_version="4"))],
-        queue=QueueSettings(enabled=True),
-        tasks=[
-            SubmitTask(
-                task_key="products_silver",
-                environment_key="Default",
-                notebook_task=NotebookTask(
-                    notebook_path="notebooks/silver/NB_process_products_silver",
-                    source=Source.GIT,
-                    base_parameters={
-                        "CATALOG": catalog,
-                        "BRONZE_SCHEMA": "bronze",
-                        "BRONZE_TABLE": "products",
-                        "SILVER_SCHEMA": "silver",
-                        "SILVER_TABLE": "silver_products",
-                        "CHECKPOINT_PATH": f"/Volumes/{catalog}/default/mnt/checkpoints/products_silver",
-                    },
-                ),
-            )
-        ],
+def run_ingest_job(
+    client: WorkspaceClient,
+    job_id: int,
+    kafka_bootstrap: str,
+    poll_seconds: int,
+    timeout_seconds: int,
+) -> dict:
+    run = client.jobs.run_now(
+        job_id=job_id, notebook_params={"KAFKA_BOOTSTRAP": kafka_bootstrap}
     )
-    return wait_for_run(client, submitted.run_id, poll_seconds, timeout_seconds)
+    return wait_for_run(client, run.run_id, poll_seconds, timeout_seconds)
 
 
 def main() -> int:
@@ -307,23 +290,13 @@ def main() -> int:
     run_generators(args.products_iterations, args.orders_iterations)
 
     client = build_client()
-    orders_run = run_orders_job(
+    ingest_run = run_ingest_job(
         client,
         job_id=args.job_id,
         kafka_bootstrap=kafka_bootstrap,
         poll_seconds=args.poll_seconds,
         timeout_seconds=args.timeout_seconds,
     )
-
-    products_run = None
-    if not args.skip_products_silver:
-        products_run = run_products_silver(
-            client,
-            catalog=args.catalog,
-            git_branch=args.git_branch,
-            poll_seconds=args.poll_seconds,
-            timeout_seconds=args.timeout_seconds,
-        )
 
     output = {
         "normalized_notebooks": normalized,
@@ -336,14 +309,11 @@ def main() -> int:
             "products_iterations": args.products_iterations,
             "orders_iterations": args.orders_iterations,
         },
-        "orders_job_run": orders_run,
-        "products_silver_run": products_run,
+        "ingest_job_run": ingest_run,
     }
     print(json.dumps(output, indent=2, default=str))
 
-    success = orders_run["result_state"] == "SUCCESS"
-    if products_run is not None:
-        success = success and products_run["result_state"] == "SUCCESS"
+    success = ingest_run["result_state"] == "SUCCESS"
     return 0 if success else 1
 
 

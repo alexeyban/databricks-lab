@@ -22,16 +22,34 @@ resources:
           email_notifications: {}
           webhook_notifications: {}
           environment_key: Default
-        - task_key: ingest_To_Silver
+        - task_key: silver_products_generic
           depends_on:
             - task_key: Ingest_to_Bronze
           run_if: ALL_SUCCESS
           notebook_task:
-            notebook_path: notebooks/silver/NB_process_to_silver
+            notebook_path: notebooks/silver/NB_process_to_silver_generic
+            base_parameters:
+              TABLE_ID: products
+              RUN_BOOTSTRAP_HOOKS: "false"
             source: GIT
           timeout_seconds: 0
           email_notifications: {}
           webhook_notifications: {}
+          environment_key: Default
+        - task_key: silver_orders_generic
+          depends_on:
+            - task_key: Ingest_to_Bronze
+          run_if: ALL_SUCCESS
+          notebook_task:
+            notebook_path: notebooks/silver/NB_process_to_silver_generic
+            base_parameters:
+              TABLE_ID: orders
+              RUN_BOOTSTRAP_HOOKS: "false"
+            source: GIT
+          timeout_seconds: 0
+          email_notifications: {}
+          webhook_notifications: {}
+          environment_key: Default
       git_source:
         git_url: https://github.com/alexeyban/databricks-lab
         git_provider: gitHub
