@@ -90,7 +90,8 @@ python3 skills/docker-databricks-lab-ops/scripts/run_databricks_notebook.py \
 ### 8. Use the smoke test when the user wants one-command verification
 
 - Use `scripts/smoke_test_notebooks.py`.
-- It discovers or starts an ngrok tunnel, restarts Docker with the correct advertised Kafka listener, repairs the local source schema if it is still on the legacy `orders.product` layout, registers the connector, runs bounded load, triggers Databricks notebook runs, and waits for terminal results.
+- It discovers or starts an ngrok tunnel, restarts Docker with the correct advertised Kafka listener, repairs the local source schema if it is still on the legacy `orders.product` layout, registers the connector, runs bounded load, triggers Databricks notebook runs, waits for terminal results, runs dbt for the Gold layer, and verifies the Gold table is populated.
+- If another compatible lab stack is already running, pass `--reuse-existing-infra` to skip `docker compose up -d` and reuse the existing local services.
 
 ## Scripts
 

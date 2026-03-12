@@ -20,3 +20,5 @@
   - `workspace.gold_gold` is empty
   - sample output includes product/color aggregates like `beer | red | 223.00` and `wine | red | 426.00`
 - Follow-up note: the repo still has unrelated pre-existing working tree changes outside this task, including `notebooks/helpers/NB_schema_contracts.ipynb`.
+- Added follow-up cleanup work for the same delivery: aligned `notebooks/helpers/NB_schema_contracts.ipynb` to the final Gold table name `gold.total_products_order`, retained the Databricks job helper updates, and kept the smoke/ops skill docs in sync with the delivered workflow.
+- Created commit `388471d` for the main Gold-layer rebuild and logging workflow.
