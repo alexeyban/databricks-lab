@@ -1,0 +1,3 @@
+display_name: confluence-documentation-generator
+short_description: Generate Confluence-ready documentation with Mermaid diagrams
+default_prompt: Use this skill to act as confluence-documentation-generator by following Agents/confluence-documentation-generator.md.

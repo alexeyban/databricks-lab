@@ -1,5 +1,25 @@
 # OpenCode Log
 
+## 2026-03-13
+
+- Built Confluence documentation generator with both local Python script and Databricks notebook support.
+- Created `runtime/confluence_doc_generator.py` with:
+  - Schema parser for PostgreSQL source tables
+  - Job config parser for Databricks YAML
+  - Mermaid diagram generators (architecture, data flow, ER diagram, job structure)
+  - HTML generator with Confluence-compatible inline styles
+  - Markdown generator with native Mermaid support
+- Created `notebooks/helpers/NB_confluence_generator.ipynb` as the Databricks notebook version.
+- Generated output files:
+  - `docs/confluence_html.html` (16KB) - Full HTML with inline CSS and embedded Mermaid
+  - `docs/confluence_markdown.md` (10KB) - Confluence-compatible Markdown
+  - `docs/diagrams/` - Standalone Mermaid diagram files
+- Added new agent: `Agents/confluence-documentation-generator.md`
+- Added new skill: `skills/confluence-documentation-generator/`
+- Updated `AGENTS.md` with the new agent and skill references
+- Added `docs/` to `.gitignore` to avoid committing generated outputs
+- Documentation sections include: Overview, Architecture, Data Flow, Source Schema, Medallion Architecture, Job Configuration, Data Quality, Operational Guide, Troubleshooting
+
 ## 2026-03-12
 
 - Reviewed local `Agents/` and `skills/` guidance and used the repo-specific Databricks workflow as the main operating path.

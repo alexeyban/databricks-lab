@@ -44,6 +44,7 @@ This repo includes a local agent/skill catalog. Use it as part of normal work.
 - `Agents/databricks-dq-automation.md`: run stored SQL DQ checks after pipeline changes
 - `Agents/spark_performance_engineer.md`: Spark tuning and execution-performance review
 - `Agents/evidenceqa.md` and `Agents/testing-reality-checker.md`: evidence-based QA and final readiness checks
+- `Agents/confluence-documentation-generator.md`: generate Confluence-ready docs with Mermaid diagrams
 
 ### Most Relevant Local Skills
 - `skills/docker-databricks-lab-ops/`: primary repo-specific operational workflow; use for stack bring-up, connector registration, generators, ngrok/Kafka wiring, Databricks runs, and smoke tests
@@ -55,12 +56,14 @@ This repo includes a local agent/skill catalog. Use it as part of normal work.
 - `skills/databricks-data-quality-analyst/`: use when validating table or notebook outputs
 - `skills/databricks-dq-automation/`: run repo-managed SQL checks in `dq_queries/silver/` after pipeline updates
 - `skills/testing-reality-checker/`: use for final confidence checks before calling work done
+- `skills/confluence-documentation-generator/`: use to generate Confluence-ready docs with Mermaid diagrams
 
 ### Recommended Sequencing
 - Delivery flow: `engineering-data-engineer` -> `databricks-notebook-publisher` -> `databricks-job-operator`
 - Failure flow: `databricks-job-operator` -> `databricks-notebook-remediator` -> `databricks-job-operator`
 - Validation flow: `databricks-data-quality-analyst` -> `testing-reality-checker`
 - Automated DQ flow: `databricks-dq-automation` after successful Silver or workflow updates
+- Documentation flow: `confluence-documentation-generator` to generate Confluence-ready docs
 - End-to-end ops flow: consult `skills/docker-databricks-lab-ops/` first
 
 ### Notes
@@ -108,6 +111,9 @@ Use the native commands below.
   - `python3 test_databricks.py`
 - End-to-end notebook smoke test:
   - `python3 skills/docker-databricks-lab-ops/scripts/smoke_test_notebooks.py`
+- Generate Confluence documentation:
+  - `python3 runtime/confluence_doc_generator.py [output_dir]`
+  - Outputs: `docs/confluence_html.html`, `docs/confluence_markdown.md`, `docs/diagrams/*.mmd`
 
 ### dbt
 Run these from `cdc_gold/`.
