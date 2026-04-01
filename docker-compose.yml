@@ -37,7 +37,7 @@ services:
   postgres:
     image: debezium/postgres:15
     ports:
-      - "5432:5432"
+      - "${PGPORT_HOST:-5432}:5432"
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres

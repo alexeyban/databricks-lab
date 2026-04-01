@@ -1,0 +1,5 @@
+# Local override — remaps PostgreSQL host port to avoid conflict with other stacks on 5432
+services:
+  postgres:
+    ports:
+      - "5433:5432"
