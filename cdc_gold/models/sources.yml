@@ -3,39 +3,51 @@ version: 2
 sources:
   - name: silver
     schema: silver
-    config:
-      loaded_at_field: last_updated_dt
-      freshness:
-        warn_after: {count: 30, period: minute}
-        error_after: {count: 2, period: hour}
+    freshness:
+      warn_after: {count: 30, period: minute}
+      error_after: {count: 2, period: hour}
     tables:
-      - name: silver_orders
-        description: Current-state orders table produced by the Silver Databricks streaming merge.
+      - name: silver_rental
+        description: Current-state rentals produced by the Silver Databricks streaming merge.
+        loaded_at_field: last_updated_dt
         columns:
-          - name: id
+          - name: rental_id
             tests:
               - not_null
               - unique
-          - name: product_id
+          - name: inventory_id
             tests:
               - not_null
-          - name: product_legacy
-          - name: price
+          - name: customer_id
             tests:
               - not_null
           - name: last_updated_dt
             tests:
               - not_null
-      - name: silver_products
-        description: Current-state products table produced by the Silver Databricks streaming merge.
+
+      - name: silver_film
+        description: Current-state film catalogue produced by the Silver Databricks streaming merge.
+        loaded_at_field: last_update
         columns:
-          - name: id
+          - name: film_id
             tests:
               - not_null
               - unique
-          - name: product_name
+          - name: title
             tests:
               - not_null
-          - name: color
+
+      - name: silver_payment
+        description: Current-state payments produced by the Silver Databricks streaming merge.
+        loaded_at_field: last_updated_dt
+        columns:
+          - name: payment_id
+            tests:
+              - not_null
+              - unique
+          - name: rental_id
+            tests:
+              - not_null
+          - name: amount
             tests:
               - not_null

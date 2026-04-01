@@ -1,0 +1,60 @@
+version: 2
+
+models:
+  - name: gold_rental
+    description: Current-state Gold rental mart with payment totals and rental status.
+    columns:
+      - name: rental_id
+        description: Unique rental identifier
+        tests:
+          - not_null
+          - unique
+      - name: inventory_id
+        description: Inventory item rented
+        tests:
+          - not_null
+      - name: customer_id
+        description: Customer who made the rental
+        tests:
+          - not_null
+      - name: rental_date
+        description: Date and time the rental was created
+        tests:
+          - not_null
+      - name: rental_status
+        description: Rental lifecycle status (open or returned)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['open', 'returned']
+      - name: last_updated_dt
+        description: Timestamp of the last CDC update to this record
+        tests:
+          - not_null
+
+  - name: gold_film
+    description: Current-state Gold film catalogue with rental rate tier classification.
+    columns:
+      - name: film_id
+        description: Unique film identifier
+        tests:
+          - not_null
+          - unique
+      - name: title
+        description: Film title
+        tests:
+          - not_null
+      - name: rental_rate
+        description: Current rental rate
+        tests:
+          - not_null
+      - name: rental_rate_tier
+        description: Rental rate classification (budget, standard, premium)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['budget', 'standard', 'premium']
+      - name: last_update
+        description: Timestamp of the last update in the source system
+        tests:
+          - not_null

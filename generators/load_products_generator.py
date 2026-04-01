@@ -1,3 +1,9 @@
+"""
+Film generator for the dvdrental database.
+
+The dvdrental database ships with ~1000 films as seed data, so this generator
+only performs UPDATE mutations to simulate catalogue changes (pricing, duration).
+"""
 import os
 import random
 import time
@@ -5,8 +11,7 @@ import time
 import psycopg2
 
 
-PRODUCTS = ["beer", "bread", "wine", "cheese", "vodka"]
-COLORS = ["brown", "white", "red", "green", "black"]
+RATINGS = ["G", "PG", "PG-13", "R", "NC-17"]
 
 
 def env_float(name: str, default: float) -> float:
@@ -34,75 +39,51 @@ SLEEP_MIN = env_float("SLEEP_MIN", 1.0)
 SLEEP_MAX = env_float("SLEEP_MAX", 3.0)
 
 
-def pick_existing_id(table_name: str) -> int | None:
-    CURSOR.execute(f"SELECT max(id) FROM {table_name}")
-    max_id = CURSOR.fetchone()[0]
-
-    if not max_id:
-        return None
-
-    candidate = random.randint(1, max_id)
-    CURSOR.execute(
-        f"SELECT id FROM {table_name} WHERE id >= %s ORDER BY id LIMIT 1",
-        (candidate,),
-    )
-    row = CURSOR.fetchone()
-    if row:
-        return row[0]
-
-    CURSOR.execute(f"SELECT id FROM {table_name} ORDER BY id LIMIT 1")
+def random_film_id() -> int | None:
+    CURSOR.execute("SELECT film_id FROM film ORDER BY random() LIMIT 1")
     row = CURSOR.fetchone()
     return row[0] if row else None
 
 
-def insert_product() -> None:
-    CURSOR.execute(
-        """
-        INSERT INTO products(product_name, weight, color)
-        VALUES (%s, %s, %s)
-        RETURNING id
-        """,
-        (
-            random.choice(PRODUCTS),
-            round(random.uniform(0.2, 2.0), 2),
-            random.choice(COLORS),
-        ),
-    )
-    product_id = CURSOR.fetchone()[0]
-    print(f"INSERT product {product_id}")
-
-
-def update_product() -> None:
-    product_id = pick_existing_id("products")
-    if product_id is None:
+def update_film() -> None:
+    film_id = random_film_id()
+    if film_id is None:
         return
-
+    rental_rate = round(random.uniform(0.99, 4.99), 2)
+    rental_duration = random.randint(3, 7)
+    replacement_cost = round(random.uniform(9.99, 29.99), 2)
     CURSOR.execute(
         """
-        UPDATE products
-        SET weight = %s,
-            color = %s,
-            updated_at = now()
-        WHERE id = %s
+        UPDATE film
+        SET rental_rate = %s,
+            rental_duration = %s,
+            replacement_cost = %s,
+            last_update = now()
+        WHERE film_id = %s
         """,
-        (
-            round(random.uniform(0.2, 2.0), 2),
-            random.choice(COLORS),
-            product_id,
-        ),
+        (rental_rate, rental_duration, replacement_cost, film_id),
     )
-    print(f"UPDATE product {product_id}")
+    print(f"UPDATE film {film_id} rental_rate={rental_rate} rental_duration={rental_duration}")
 
 
 def main() -> None:
+    # Wait for films to be loaded before running
+    max_wait = 60
+    wait_count = 0
+    while wait_count < max_wait:
+        CURSOR.execute("SELECT COUNT(*) FROM film")
+        if CURSOR.fetchone()[0] > 0:
+            break
+        print(f"Waiting for dvdrental films to load... ({wait_count + 1}/{max_wait})")
+        time.sleep(1)
+        wait_count += 1
+    else:
+        print("Timeout waiting for films. Exiting.")
+        return
+
     iteration = 0
     while ITERATIONS is None or iteration < ITERATIONS:
-        action = random.choices(["insert", "update"], weights=[0.6, 0.4])[0]
-        if action == "insert":
-            insert_product()
-        else:
-            update_product()
-
+        update_film()
         iteration += 1
         time.sleep(random.uniform(SLEEP_MIN, SLEEP_MAX))
 

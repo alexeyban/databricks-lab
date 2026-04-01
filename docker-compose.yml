@@ -43,7 +43,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: demo
     volumes:
-      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./docker/init-dvdrental.sh:/docker-entrypoint-initdb.d/init.sh
     command: >
       postgres
       -c wal_level=logical

@@ -12,7 +12,7 @@
     "publication.name": "dbz_publication",
     "slot.name": "debezium_slot",
     "topic.prefix": "cdc",
-    "table.include.list": "public.orders,public.products",
+    "table.include.list": "public.film,public.rental,public.payment",
     "tombstones.on.delete": "false",
     "snapshot.mode": "initial"
   }
