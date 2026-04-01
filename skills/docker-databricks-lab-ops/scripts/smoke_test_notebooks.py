@@ -42,6 +42,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--kafka-local-port", type=int, default=9093)
     parser.add_argument("--film-iterations", type=int, default=6)
     parser.add_argument("--rental-iterations", type=int, default=12)
+    parser.add_argument("--reference-iterations", type=int, default=20)
     parser.add_argument("--poll-seconds", type=int, default=15)
     parser.add_argument("--timeout-seconds", type=int, default=1800)
     parser.add_argument("--catalog", default="workspace")
@@ -109,7 +110,7 @@ def register_connector() -> str:
         raise
 
 
-def run_generators(film_iterations: int, rental_iterations: int) -> None:
+def run_generators(film_iterations: int, rental_iterations: int, reference_iterations: int) -> None:
     env = os.environ.copy()
     run_cmd(
         ["python3", "generators/load_products_generator.py"],
@@ -118,6 +119,10 @@ def run_generators(film_iterations: int, rental_iterations: int) -> None:
     run_cmd(
         ["python3", "generators/load_generator.py"],
         env=env | {"ITERATIONS": str(rental_iterations)},
+    )
+    run_cmd(
+        ["python3", "generators/load_reference_generator.py"],
+        env=env | {"ITERATIONS": str(reference_iterations)},
     )
 
 
@@ -227,7 +232,7 @@ def main() -> int:
 
     wait_for_connect()
     connector_status = register_connector()
-    run_generators(args.film_iterations, args.rental_iterations)
+    run_generators(args.film_iterations, args.rental_iterations, args.reference_iterations)
 
     client = build_client()
 
@@ -261,6 +266,7 @@ def main() -> int:
         "load_generation": {
             "film_iterations": args.film_iterations,
             "rental_iterations": args.rental_iterations,
+            "reference_iterations": args.reference_iterations,
         },
         "reset_run": reset_run,
         "dvdrental_job_run": dvdrental_run,

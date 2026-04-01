@@ -12,8 +12,10 @@
     "publication.name": "dbz_publication",
     "slot.name": "debezium_slot",
     "topic.prefix": "cdc",
-    "table.include.list": "public.film,public.rental,public.payment",
+    "table.include.list": "public.actor,public.address,public.category,public.city,public.country,public.customer,public.film,public.film_actor,public.film_category,public.inventory,public.language,public.payment,public.rental,public.staff,public.store",
     "tombstones.on.delete": "false",
-    "snapshot.mode": "initial"
+    "snapshot.mode": "initial",
+    "signal.data.collection": "public.debezium_signal",
+    "incremental.snapshot.chunk.size": "1024"
   }
 }

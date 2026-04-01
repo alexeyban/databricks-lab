@@ -365,6 +365,7 @@ def start_docker_and_generate(
     kafka_bootstrap: str,
     film_iterations: int,
     rental_iterations: int,
+    reference_iterations: int,
     kafka_local_port: int,
 ) -> str:
     print("\n=== Step 4: Docker stack + connector + generators ===")
@@ -392,6 +393,12 @@ def start_docker_and_generate(
     run_cmd(
         ["python3", "generators/load_generator.py"],
         env=os.environ.copy() | {"ITERATIONS": str(rental_iterations)},
+    )
+
+    print(f"  Running reference generator ({reference_iterations} iterations)…")
+    run_cmd(
+        ["python3", "generators/load_reference_generator.py"],
+        env=os.environ.copy() | {"ITERATIONS": str(reference_iterations)},
     )
 
     return connector_status
@@ -469,6 +476,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--kafka-local-port", type=int, default=9093)
     parser.add_argument("--film-iterations", type=int, default=6)
     parser.add_argument("--rental-iterations", type=int, default=12)
+    parser.add_argument("--reference-iterations", type=int, default=20)
     parser.add_argument("--poll-seconds", type=int, default=15)
     parser.add_argument("--timeout-seconds", type=int, default=1800)
     parser.add_argument(
@@ -530,7 +538,8 @@ def main() -> int:
     # Step 4 — Docker + connector + generators
     if not args.skip_docker:
         output["connector_status"] = start_docker_and_generate(
-            kafka_bootstrap, args.film_iterations, args.rental_iterations, args.kafka_local_port
+            kafka_bootstrap, args.film_iterations, args.rental_iterations,
+            args.reference_iterations, args.kafka_local_port,
         )
     else:
         print("Skipping Docker/connector/generators (--skip-docker)")
