@@ -131,6 +131,7 @@ python3 skills/docker-databricks-lab-ops/scripts/smoke_test_notebooks.py \
 - `scripts/reset_databricks_tables.py`: drop all Bronze/Silver/Gold Delta tables and clear streaming checkpoints
 - `scripts/run_databricks_notebook.py`: launch or submit a Databricks run and poll to completion
 - `scripts/smoke_test_notebooks.py`: run the end-to-end smoke test with dynamic ngrok bootstrap handling
+- `scripts/migrate_and_run.py`: full migration script — drops legacy tables, updates the Databricks job via API, resets dvdrental tables, starts Docker+connector+generators, and triggers the job end-to-end
 
 ## References
 

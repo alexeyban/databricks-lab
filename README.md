@@ -1,115 +1,218 @@
 # Databricks CDC Lakehouse Lab
 
-This project demonstrates an end-to-end CDC pipeline from PostgreSQL into a Databricks medallion lakehouse:
+End-to-end reference implementation of a Change Data Capture pipeline from the **dvdrental** PostgreSQL sample database into a Databricks medallion lakehouse (Bronze → Silver → Gold).
 
-Agent-system inspiration for this repository was borrowed from [agency-agents](https://github.com/msitarzewski/agency-agents/).
+Agent-system inspiration was borrowed from [agency-agents](https://github.com/msitarzewski/agency-agents/).
 
-- PostgreSQL generates row-level changes for `orders` and `products` tables
-- Debezium captures WAL changes and publishes them to Kafka topics with the `cdc` prefix
-- A Databricks Bronze notebook ingests raw Kafka events into Delta tables per source table
-- A Databricks Silver notebook normalizes Debezium envelopes into current-state Delta tables with **schema evolution support**
-- dbt builds a Gold presentation model with aggregate business metrics and data quality tests
+## Architecture
 
-## Schema Design
+```
+PostgreSQL dvdrental (WAL)
+  → Debezium Connect (topics: cdc.public.film, cdc.public.rental, cdc.public.payment)
+    → Databricks Bronze (raw Debezium envelopes in Delta tables)
+      → Databricks Silver (current-state via MERGE, schema evolution)
+        → dbt Gold (business-ready models with data quality tests)
+```
 
-### Source Tables (PostgreSQL)
+### Source Tables (PostgreSQL dvdrental)
 
-**products**
-- `id` (SERIAL PRIMARY KEY)
-- `product_name` (TEXT)
-- `weight` (NUMERIC)
-- `color` (TEXT)
-- `created_at`, `updated_at` (TIMESTAMP)
+| Table | Changes captured |
+|-------|-----------------|
+| `public.film` | Updates: rental_rate, rental_duration, replacement_cost |
+| `public.rental` | Inserts: new rentals; Updates: return_date set on return |
+| `public.payment` | Inserts: payments for completed rentals |
 
-**orders**
-- `id` (SERIAL PRIMARY KEY)
-- `product_id` (INTEGER FOREIGN KEY → products.id)
-- `price` (NUMERIC)
-- `created_at` (TIMESTAMP)
+### Medallion Tables (Databricks Unity Catalog)
 
-### Medallion Architecture
+| Layer | Table | Merge key |
+|-------|-------|-----------|
+| Bronze | `workspace.bronze.film` | — |
+| Bronze | `workspace.bronze.rental` | — |
+| Bronze | `workspace.bronze.payment` | — |
+| Silver | `workspace.silver.silver_film` | film_id |
+| Silver | `workspace.silver.silver_rental` | rental_id |
+| Silver | `workspace.silver.silver_payment` | payment_id |
+| Gold | `workspace.gold.gold_film` | film_id |
+| Gold | `workspace.gold.gold_rental` | rental_id |
+| Monitoring | `workspace.monitoring.schema_drift_log` | — |
 
-| Layer | Table | Description |
-|-------|-------|-------------|
-| Bronze | `bronze.orders`, `bronze.products` | Raw Debezium CDC events |
-| Silver | `silver.silver_orders`, `silver.silver_products` | Current-state with schema evolution |
-| Gold | `gold.total_products_order` | Business-ready aggregate by product and color |
+## Quick Start
+
+### 1. Local Infrastructure
+
+```bash
+# Start the full CDC stack (Zookeeper, Kafka, PostgreSQL 15, Debezium Connect,
+# Schema Registry, Kafka UI)
+docker compose up -d
+
+# Wait ~30s for Kafka Connect, then register the Debezium connector
+curl -X POST http://localhost:8083/connectors \
+  -H 'Content-Type: application/json' \
+  --data @postgres-connector.json
+
+# Check connector status
+curl http://localhost:8083/connectors/postgres-connector/status
+
+# Kafka UI
+open http://localhost:8085
+```
+
+PostgreSQL initialises from `docker/init-dvdrental.sh` on first start — this downloads and restores the full dvdrental dataset (~1000 films, ~16k rentals, ~14k payments) and creates the logical replication publication.
+
+### 2. Python Setup
+
+```bash
+pip install -r requirements.txt
+
+# Copy and fill in your Databricks credentials
+cp .envexample .env
+```
+
+### 3. Generate CDC Traffic
+
+```bash
+# Film updates (rental_rate, rental_duration, replacement_cost)
+python3 generators/load_products_generator.py
+
+# New rentals, returns, and payments
+python3 generators/load_generator.py
+
+# Optional env vars: ITERATIONS, SLEEP_MIN, SLEEP_MAX
+# DB env vars: PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD
+```
+
+### 4. Databricks Pipeline
+
+Run the Bronze notebook first, then all three Silver notebooks in parallel:
+
+```bash
+# One-command full migration + E2E test (discovers ngrok, resets tables,
+# runs generators, triggers the Databricks job, and polls to completion)
+python3 skills/docker-databricks-lab-ops/scripts/migrate_and_run.py
+```
+
+Or trigger the job manually:
+
+```bash
+python3 skills/docker-databricks-lab-ops/scripts/run_databricks_notebook.py \
+  --job-id 574281734474239 \
+  --notebook-param KAFKA_BOOTSTRAP=<ngrok-host:port>
+```
+
+### 5. dbt Gold Layer
+
+```bash
+cd cdc_gold
+dbt debug          # verify connection
+dbt build          # run models + tests
+dbt test           # data quality tests only
+```
 
 ## Repository Layout
 
-- `docker-compose.yml`: local PostgreSQL, Kafka, Debezium Connect, Schema Registry, Kafka UI
-- `init-db.sql`: source schema bootstrap with foreign key relationships
-- `migrate_schema.sql`: migration script for existing deployments (TEXT → FK)
-- `postgres-connector.json`: Debezium PostgreSQL source connector definition
-- `generators/`: local data generators for `orders` and `products`
-- `notebooks/bronze/`: Databricks Bronze ingestion notebook
-- `notebooks/silver/`: Databricks Silver merge notebooks with schema evolution
-- `notebooks/helpers/`: Reusable catalog helper functions
-  - `NB_catalog_helpers.ipynb`: Schema/table creation utilities
-  - `NB_schema_drift_helpers.ipynb`: Schema drift detection and alerting
-  - `NB_schema_contracts.ipynb`: Expected schema contracts for all layers
-- `Orders-ingest-job.yaml`: Databricks job definition for Bronze, Silver, and Gold dbt processing
-- `databricks-lab-architecture.drawio`: editable architecture diagram with overview and detailed pages
-- `cdc_gold/`: dbt project for Gold models and aggregate-level data quality tests
-- `OPENCODE_LOG.md`: local OpenCode session log and handoff file
+```
+docker-compose.yml              Local CDC stack definition
+postgres-connector.json         Debezium PostgreSQL connector config
+Orders-ingest-job.yaml          Databricks job definition (Bronze → Silver)
+docker/init-dvdrental.sh        PostgreSQL init: download + restore dvdrental, create publication
 
-## OpenCode Session Log
+generators/
+  load_generator.py             Rental inserts, returns, payment inserts
+  load_products_generator.py    Film attribute updates
 
-OpenCode should read `OPENCODE_LOG.md` at the start of each session, use it to restore context, and append a short activity entry for meaningful work.
+notebooks/
+  bronze/NB_ingest_to_bronze.ipynb          Kafka → Bronze Delta (topic pattern cdc.public.*)
+  silver/NB_process_to_silver.ipynb         Bronze rental → silver.silver_rental
+  silver/NB_process_products_silver.ipynb   Bronze film → silver.silver_film
+  silver/NB_process_payment_silver.ipynb    Bronze payment → silver.silver_payment
+  helpers/NB_catalog_helpers.ipynb          Table/schema creation utilities
+  helpers/NB_schema_drift_helpers.ipynb     Schema drift detection + alerting
+  helpers/NB_schema_contracts.ipynb         Expected schema definitions (Bronze/Silver/Gold)
+  helpers/NB_reset_tables.ipynb             Drop all tables + clear checkpoints
 
-## End-to-End Flow
+cdc_gold/                       dbt project for Gold models
+skills/docker-databricks-lab-ops/scripts/
+  migrate_and_run.py            Full migration + E2E test script
+  smoke_test_notebooks.py       Smoke test: Docker + connector + generators + job trigger
+  reset_databricks_tables.py    Trigger NB_reset_tables on Databricks
+  run_databricks_notebook.py    Submit/trigger a Databricks job or notebook run
+  prepare_ngrok_kafka.py        Discover or start ngrok TCP tunnel for Kafka
+```
 
-1. Start local CDC infrastructure with Docker Compose.
-2. Register `postgres-connector.json` in Debezium Connect.
-3. Run the products generator first (orders reference products):
-   ```bash
-   python3 generators/load_products_generator.py
-   ```
-4. Run the orders generator:
-   ```bash
-   python3 generators/load_generator.py
-   ```
-5. Run the Bronze notebook to ingest raw CDC events.
-6. Run the Silver notebooks:
-   - `NB_process_to_silver.ipynb` for orders
-   - `NB_process_products_silver.ipynb` for products
-7. Run dbt in `cdc_gold/` to build and test the Gold layer aggregate.
+## Notebooks
+
+### Bronze — NB_ingest_to_bronze
+
+Structured streaming from Kafka → Bronze Delta tables.
+
+- Topic pattern: `cdc.public.*` (dynamically names target table from topic)
+- Parameters: `KAFKA_BOOTSTRAP`, `TOPIC_PATTERN` (default `cdc.public.*`), `CATALOG`, `BRONZE_SCHEMA`, `CHECKPOINT_PATH`
+- Output: `workspace.bronze.{film, rental, payment}`
+- Schema: `topic`, `partition`, `offset`, `kafka_timestamp`, `message_key`, `value`, `source_schema`, `table_name`, `ingested_at`
+
+### Silver — per-table MERGE notebooks
+
+Each notebook reads a Bronze table, parses the Debezium envelope, and upserts into Silver.
+
+| Notebook | Source | Target | Merge key |
+|----------|--------|--------|-----------|
+| NB_process_products_silver | bronze.film | silver.silver_film | film_id |
+| NB_process_to_silver | bronze.rental | silver.silver_rental | rental_id |
+| NB_process_payment_silver | bronze.payment | silver.silver_payment | payment_id |
+
+Features:
+- Schema evolution via `.option("mergeSchema", "true")` — new columns are auto-added
+- Dynamic MERGE rebuilt from current table schema at runtime
+- Debezium `NUMERIC` decoding: `cast(conv(hex(unbase64(value)), 16, 10) as double) / pow(10, scale)`
+- All schema changes logged to `workspace.monitoring.schema_drift_log`
+
+### Helpers
+
+- **NB_catalog_helpers**: `ensure_schema_exists`, `create_silver_table_*`, `build_merge_clauses`, `execute_merge`
+- **NB_schema_drift_helpers**: `validate_schema_with_policy`, `SchemaDriftException`, webhook/email/log alerting
+- **NB_schema_contracts**: expected Bronze/Silver/Gold schemas for drift detection
+- **NB_reset_tables**: drops all Bronze/Silver/Gold/monitoring tables + clears checkpoints. Parameters: `CATALOG`, `DRY_RUN`
 
 ## Schema Evolution
 
-The Silver layer supports **schema evolution** - new columns added to the source schema will be automatically propagated:
+Silver tables support automatic schema evolution — new columns in Debezium events are detected and added:
 
-- **Backward compatible**: Legacy `product` (TEXT) field is preserved as `product_legacy` during transition
-- **Forward compatible**: New fields in Debezium events are automatically added to Silver tables
-- **Dynamic MERGE**: Upsert logic adapts to the current table schema at runtime
-
-To enable schema evolution in your own pipelines:
-1. Set `.option("mergeSchema", "true")` on streaming reads/writes
-2. Use flexible JSON schemas that include both old and new fields
-3. Build MERGE statements dynamically based on existing columns
+1. `.option("mergeSchema", "true")` on streaming writes
+2. MERGE statements rebuilt dynamically from the current live table schema
+3. All changes logged to `workspace.monitoring.schema_drift_log`
 
 ## Schema Drift Detection
 
-The pipeline includes **schema drift detection** with configurable policies and alerting:
+Configurable per-layer policy with alerting.
 
 ### Policies
 
-| Policy | Behavior | Use Case |
-|--------|----------|----------|
-| `strict` | Block on any schema change | Gold layer, regulated data |
-| `additive_only` | Allow new columns, block removals/type changes | Silver layer (default) |
-| `permissive` | Log drift but never block | Bronze layer, exploratory |
+| Policy | Behaviour | Default layer |
+|--------|-----------|--------------|
+| `permissive` | Log only, never block | Bronze |
+| `additive_only` | Allow new columns, block removals/type changes | Silver |
+| `strict` | Block on any schema change | Gold |
 
 ### Alert Channels
 
-- **log**: Log to notebook/stdout (default)
-- **webhook**: Send to Slack or Microsoft Teams
-- **email**: Send via SMTP (requires configuration)
-- **all**: Use all configured channels
+`log` · `webhook` (Slack/Teams) · `email` (SMTP) · `all`
 
-### Monitoring Table
+### Notebook Parameters
 
-All drift events are logged to `{catalog}.monitoring.schema_drift_log`:
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `SCHEMA_POLICY` | `additive_only` | Validation policy |
+| `ALERT_CHANNEL` | `log` | Alert delivery method |
+| `WEBHOOK_URL` | (empty) | Slack/Teams webhook URL |
+
+Example — enable Slack alerts:
+
+```python
+dbutils.widgets.set("ALERT_CHANNEL", "webhook")
+dbutils.widgets.set("WEBHOOK_URL", "https://hooks.slack.com/services/XXX/YYY/ZZZ")
+```
+
+### Monitoring Query
 
 ```sql
 SELECT * FROM workspace.monitoring.schema_drift_log
@@ -117,81 +220,34 @@ ORDER BY detected_at DESC
 LIMIT 10;
 ```
 
-### Notebook Parameters
+## Databricks Job
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `MONITORING_SCHEMA` | `monitoring` | Schema for drift log table |
-| `SCHEMA_POLICY` | `additive_only` | Validation policy |
-| `ALERT_CHANNEL` | `log` | Alert delivery method |
-| `WEBHOOK_URL` | (empty) | Slack/Teams webhook URL |
+`Orders-ingest-job.yaml` defines the **dvdrental ingest job** (ID: `574281734474239`):
 
-### Example: Configure Slack Alerts
+- **Schedule**: every 5 minutes (`56 4/5 * * * ?`, Europe/Belgrade)
+- **Ingest_to_Bronze**: reads from Kafka, writes `bronze.{film,rental,payment}`
+- **ingest_Film_To_Silver** ┐
+- **ingest_Rental_To_Silver** ├ run in parallel after Bronze succeeds
+- **ingest_Payment_To_Silver** ┘
+- **Git source**: `https://github.com/alexeyban/databricks-lab` branch `main`
 
-```bash
-# Run Silver notebook with Slack alerts
-dbutils.widgets.set("SCHEMA_POLICY", "additive_only")
-dbutils.widgets.set("ALERT_CHANNEL", "webhook")
-dbutils.widgets.set("WEBHOOK_URL", "https://hooks.slack.com/services/XXX/YYY/ZZZ")
-```
-
-### Severity Levels
-
-| Severity | Trigger | Action |
-|----------|---------|--------|
-| `NONE` | No drift detected | None |
-| `WARNING` | Additive changes only | Log + alert |
-| `CRITICAL` | Removed columns or type changes | Block pipeline + alert |
-
-## Migrating Existing Deployments
-
-If you have an existing deployment with the old `product TEXT` column, run the migration script:
+Update the job via API after changing the YAML:
 
 ```bash
-psql -h localhost -U postgres -d demo -f migrate_schema.sql
+python3 skills/docker-databricks-lab-ops/scripts/migrate_and_run.py \
+  --skip-legacy-drop --skip-reset --skip-docker \
+  --kafka-bootstrap <host:port>
 ```
 
-This script:
-1. Adds a `product_id` column
-2. Maps existing product names to product IDs
-3. Drops the old `product` column
-4. Adds a foreign key constraint
-5. Creates an index for join performance
+## ngrok for Local Development
 
-**Warning**: Run only after products exist and product names match order values.
-
-## Local Infrastructure
-
-Start the local stack:
-
-```bash
-docker compose up -d
-```
-
-Register the connector after Kafka Connect is ready:
-
-```bash
-curl -X POST http://localhost:8083/connectors   -H 'Content-Type: application/json'   --data @postgres-connector.json
-```
-
-Kafka is configured with two listeners:
-
-- `kafka:9092` for other containers in Docker
-- `${KAFKA_EXTERNAL_HOST:-localhost}:${KAFKA_EXTERNAL_PORT:-9093}` for host or remote clients
-
-If Databricks needs to reach Kafka from outside your machine, set `KAFKA_EXTERNAL_HOST` and `KAFKA_EXTERNAL_PORT` before starting Compose.
-
-## ngrok For Local Projects
-
-If this project runs on your laptop or inside a private network, Databricks will not be able to reach local Kafka directly. In that case, expose Kafka through an `ngrok` TCP tunnel and use the public `host:port` as the Databricks bootstrap server.
-
-Typical flow:
+Databricks cannot reach a local Kafka directly. Expose it via ngrok:
 
 ```bash
 python3 skills/docker-databricks-lab-ops/scripts/prepare_ngrok_kafka.py
 ```
 
-Then start Docker with the discovered public endpoint:
+Then start Compose with the discovered public endpoint:
 
 ```bash
 export KAFKA_EXTERNAL_HOST=<ngrok-host>
@@ -199,84 +255,35 @@ export KAFKA_EXTERNAL_PORT=<ngrok-port>
 docker compose up -d
 ```
 
-When you run the Databricks job or notebooks, pass the current tunnel endpoint as `KAFKA_BOOTSTRAP` instead of hardcoding it permanently into the repository, because `ngrok` values change after restart.
+Pass `KAFKA_BOOTSTRAP=<ngrok-host>:<ngrok-port>` when triggering the job. Do not commit ngrok values — they change on every restart.
 
-For the full automated flow, including Silver checks, dbt Gold build, and Gold output verification, use:
+## Full E2E Smoke Test
 
 ```bash
-python3 skills/docker-databricks-lab-ops/scripts/smoke_test_notebooks.py
+python3 skills/docker-databricks-lab-ops/scripts/smoke_test_notebooks.py \
+  --job-id 574281734474239 \
+  --film-iterations 6 \
+  --rental-iterations 12 \
+  --reset                  # drop all tables + checkpoints before running
 ```
+
+Or use `migrate_and_run.py` which also handles legacy table drops and job definition updates.
 
 ## Secret Hygiene
 
-Do not commit real credentials to this repository.
-
-Use [\.envexample](/home/legion/PycharmProjects/gitlab/databricks-lab/.envexample) as the template for local configuration and keep your real values only in a local `.env` or in your secret manager.
-
-Example:
+Do not commit real credentials. Use `.envexample` as the template:
 
 ```bash
 cp .envexample .env
+# edit .env with real DATABRICKS_HOST and DATABRICKS_TOKEN
 ```
 
-Then edit `.env` locally with your real Databricks values. Do not commit `.env`, `.databrickscfg`, or generated logs.
+`.env`, `.databrickscfg`, and generated logs are git-ignored.
 
-## Source Data Generators
+## Agent System
 
-Install the local Python dependency:
+`/Agents/` — 24 markdown files defining specialised agent personalities.  
+`/skills/` — 24 reusable skill definitions.  
+`/runtime/` — Python agent loop (`autonomous_agent.py`) that generates code via LLM, uploads to Databricks, runs it, and retries on failures.
 
-```bash
-python3 -m pip install -r requirements.txt
-```
-
-Run the generators:
-
-```bash
-python3 generators/load_generator.py
-python3 generators/load_products_generator.py
-```
-
-Optional environment variables:
-
-- `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`
-- `ITERATIONS` to stop after a fixed number of mutations
-- `SLEEP_MIN`, `SLEEP_MAX` to control event cadence
-
-## Databricks Runtime Expectations
-
-Create or grant access to a Unity Catalog catalog named `workspace`, or pass another catalog name through notebook parameters.
-
-Bronze notebook parameters:
-
-- `KAFKA_BOOTSTRAP`: reachable Kafka bootstrap, for example `broker.example.com:9093`
-- `TOPIC_PATTERN`: defaults to `cdc.public.*`
-- `CATALOG`: defaults to `workspace`
-- `BRONZE_SCHEMA`: defaults to `bronze`
-- `CHECKPOINT_PATH`: Delta checkpoint path for Bronze ingestion
-
-Silver notebook parameters:
-
-- `CATALOG`: defaults to `workspace`
-- `BRONZE_SCHEMA`: defaults to `bronze`
-- `BRONZE_TABLE`: defaults to `orders`
-- `SILVER_SCHEMA`: defaults to `silver`
-- `SILVER_TABLE`: defaults to `silver_orders`
-- `CHECKPOINT_PATH`: Delta checkpoint path for Silver processing
-
-## dbt Gold Layer
-
-The dbt project in `cdc_gold/` builds one Gold model:
-
-**total_products_order**
-- Aggregate total order amount by product name and color
-- Sources: `silver.silver_orders`, `silver.silver_products`
-
-Typical commands:
-
-```bash
-cd cdc_gold
-dbt debug
-dbt build
-```
-
-The model includes data quality tests for NOT NULL columns and depends on validated Silver sources.
+See `AGENT_PROMPT_EXAMPLES.md` for prompt templates.
