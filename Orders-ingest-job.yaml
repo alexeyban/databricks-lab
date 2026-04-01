@@ -16,7 +16,7 @@ resources:
           notebook_task:
             notebook_path: notebooks/bronze/NB_ingest_to_bronze
             base_parameters:
-              KAFKA_BOOTSTRAP: 5.tcp.eu.ngrok.io:17430
+              KAFKA_BOOTSTRAP: localhost:9093  # override at run time via notebook_params
             source: GIT
           timeout_seconds: 0
           email_notifications: {}
