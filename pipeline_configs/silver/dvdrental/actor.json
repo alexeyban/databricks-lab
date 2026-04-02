@@ -1,0 +1,20 @@
+{
+  "table_id": "actor",
+  "enabled": true,
+  "bronze_table": "actor",
+  "silver_table": "silver_actor",
+  "cdc_contract_key": "cdc.public.actor",
+  "silver_contract_key": "silver.actor",
+  "checkpoint_name": "actor_silver_generic",
+  "primary_keys": ["actor_id"],
+  "dedupe_order_columns": ["last_update", "event_ts_ms", "bronze_offset"],
+  "merge_core_fields": ["actor_id", "first_name", "last_name", "last_update"],
+  "fk_references": [],
+  "bootstrap_hook": null,
+  "field_mappings": [
+    {"target": "actor_id", "source_paths": ["after.actor_id", "before.actor_id"]},
+    {"target": "first_name", "source_paths": ["after.first_name", "before.first_name"]},
+    {"target": "last_name", "source_paths": ["after.last_name", "before.last_name"]},
+    {"target": "last_update", "transform": "epoch_micros_to_timestamp", "source_paths": ["after.last_update", "before.last_update"]}
+  ]
+}

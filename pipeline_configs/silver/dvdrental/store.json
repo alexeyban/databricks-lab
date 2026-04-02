@@ -1,0 +1,23 @@
+{
+  "table_id": "store",
+  "enabled": true,
+  "bronze_table": "store",
+  "silver_table": "silver_store",
+  "cdc_contract_key": "cdc.public.store",
+  "silver_contract_key": "silver.store",
+  "checkpoint_name": "store_silver_generic",
+  "primary_keys": ["store_id"],
+  "dedupe_order_columns": ["last_update", "event_ts_ms", "bronze_offset"],
+  "merge_core_fields": ["store_id", "manager_staff_id", "address_id", "last_update"],
+  "fk_references": [
+    {"column": "manager_staff_id", "target_table": "silver_staff"},
+    {"column": "address_id", "target_table": "silver_address"}
+  ],
+  "bootstrap_hook": null,
+  "field_mappings": [
+    {"target": "store_id", "source_paths": ["after.store_id", "before.store_id"]},
+    {"target": "manager_staff_id", "source_paths": ["after.manager_staff_id", "before.manager_staff_id"]},
+    {"target": "address_id", "source_paths": ["after.address_id", "before.address_id"]},
+    {"target": "last_update", "transform": "epoch_micros_to_timestamp", "source_paths": ["after.last_update", "before.last_update"]}
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "table_id": "film",
+  "enabled": true,
+  "bronze_table": "film",
+  "silver_table": "silver_film",
+  "cdc_contract_key": "cdc.public.film",
+  "silver_contract_key": "silver.film",
+  "checkpoint_name": "film_silver_generic",
+  "primary_keys": ["film_id"],
+  "dedupe_order_columns": ["last_update", "event_ts_ms", "bronze_offset"],
+  "merge_core_fields": ["film_id", "title", "description", "release_year", "language_id", "rental_duration", "rental_rate", "length", "replacement_cost", "rating", "last_update", "special_features", "fulltext"],
+  "fk_references": [
+    {"column": "language_id", "target_table": "silver_language"}
+  ],
+  "bootstrap_hook": null,
+  "field_mappings": [
+    {"target": "film_id", "source_paths": ["after.film_id", "before.film_id"]},
+    {"target": "title", "source_paths": ["after.title", "before.title"]},
+    {"target": "description", "source_paths": ["after.description", "before.description"]},
+    {"target": "release_year", "source_paths": ["after.release_year", "before.release_year"]},
+    {"target": "language_id", "source_paths": ["after.language_id", "before.language_id"]},
+    {"target": "rental_duration", "source_paths": ["after.rental_duration", "before.rental_duration"]},
+    {"target": "rental_rate", "transform": "decimal_from_debezium_bytes", "source_paths": ["after.rental_rate", "before.rental_rate"], "precision": 4, "scale": 2},
+    {"target": "length", "source_paths": ["after.length", "before.length"]},
+    {"target": "replacement_cost", "transform": "decimal_from_debezium_bytes", "source_paths": ["after.replacement_cost", "before.replacement_cost"], "precision": 5, "scale": 2},
+    {"target": "rating", "source_paths": ["after.rating", "before.rating"]},
+    {"target": "last_update", "transform": "epoch_micros_to_timestamp", "source_paths": ["after.last_update", "before.last_update"]},
+    {"target": "special_features", "source_paths": ["after.special_features", "before.special_features"]},
+    {"target": "fulltext", "source_paths": ["after.fulltext", "before.fulltext"]}
+  ]
+}

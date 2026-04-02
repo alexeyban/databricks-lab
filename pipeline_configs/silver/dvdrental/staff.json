@@ -1,0 +1,28 @@
+{
+  "table_id": "staff",
+  "enabled": true,
+  "bronze_table": "staff",
+  "silver_table": "silver_staff",
+  "cdc_contract_key": "cdc.public.staff",
+  "silver_contract_key": "silver.staff",
+  "checkpoint_name": "staff_silver_generic",
+  "primary_keys": ["staff_id"],
+  "dedupe_order_columns": ["last_update", "event_ts_ms", "bronze_offset"],
+  "merge_core_fields": ["staff_id", "first_name", "last_name", "address_id", "email", "store_id", "active", "username", "last_update"],
+  "fk_references": [
+    {"column": "address_id", "target_table": "silver_address"},
+    {"column": "store_id", "target_table": "silver_store"}
+  ],
+  "bootstrap_hook": null,
+  "field_mappings": [
+    {"target": "staff_id", "source_paths": ["after.staff_id", "before.staff_id"]},
+    {"target": "first_name", "source_paths": ["after.first_name", "before.first_name"]},
+    {"target": "last_name", "source_paths": ["after.last_name", "before.last_name"]},
+    {"target": "address_id", "source_paths": ["after.address_id", "before.address_id"]},
+    {"target": "email", "source_paths": ["after.email", "before.email"]},
+    {"target": "store_id", "source_paths": ["after.store_id", "before.store_id"]},
+    {"target": "active", "source_paths": ["after.active", "before.active"]},
+    {"target": "username", "source_paths": ["after.username", "before.username"]},
+    {"target": "last_update", "transform": "epoch_micros_to_timestamp", "source_paths": ["after.last_update", "before.last_update"]}
+  ]
+}

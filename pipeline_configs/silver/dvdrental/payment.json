@@ -1,0 +1,26 @@
+{
+  "table_id": "payment",
+  "enabled": true,
+  "bronze_table": "payment",
+  "silver_table": "silver_payment",
+  "cdc_contract_key": "cdc.public.payment",
+  "silver_contract_key": "silver.payment",
+  "checkpoint_name": "payment_silver_generic",
+  "primary_keys": ["payment_id"],
+  "dedupe_order_columns": ["last_update", "event_ts_ms", "bronze_offset"],
+  "merge_core_fields": ["payment_id", "customer_id", "staff_id", "rental_id", "amount", "payment_date"],
+  "fk_references": [
+    {"column": "customer_id", "target_table": "silver_customer"},
+    {"column": "staff_id", "target_table": "silver_staff"},
+    {"column": "rental_id", "target_table": "silver_rental"}
+  ],
+  "bootstrap_hook": null,
+  "field_mappings": [
+    {"target": "payment_id", "source_paths": ["after.payment_id", "before.payment_id"]},
+    {"target": "customer_id", "source_paths": ["after.customer_id", "before.customer_id"]},
+    {"target": "staff_id", "source_paths": ["after.staff_id", "before.staff_id"]},
+    {"target": "rental_id", "source_paths": ["after.rental_id", "before.rental_id"]},
+    {"target": "amount", "transform": "decimal_from_debezium_bytes", "source_paths": ["after.amount", "before.amount"], "precision": 5, "scale": 2},
+    {"target": "payment_date", "transform": "epoch_micros_to_timestamp", "source_paths": ["after.payment_date", "before.payment_date"]}
+  ]
+}

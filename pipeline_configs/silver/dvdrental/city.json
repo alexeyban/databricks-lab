@@ -1,0 +1,22 @@
+{
+  "table_id": "city",
+  "enabled": true,
+  "bronze_table": "city",
+  "silver_table": "silver_city",
+  "cdc_contract_key": "cdc.public.city",
+  "silver_contract_key": "silver.city",
+  "checkpoint_name": "city_silver_generic",
+  "primary_keys": ["city_id"],
+  "dedupe_order_columns": ["last_update", "event_ts_ms", "bronze_offset"],
+  "merge_core_fields": ["city_id", "city", "country_id", "last_update"],
+  "fk_references": [
+    {"column": "country_id", "target_table": "silver_country"}
+  ],
+  "bootstrap_hook": null,
+  "field_mappings": [
+    {"target": "city_id", "source_paths": ["after.city_id", "before.city_id"]},
+    {"target": "city", "source_paths": ["after.city", "before.city"]},
+    {"target": "country_id", "source_paths": ["after.country_id", "before.country_id"]},
+    {"target": "last_update", "transform": "epoch_micros_to_timestamp", "source_paths": ["after.last_update", "before.last_update"]}
+  ]
+}

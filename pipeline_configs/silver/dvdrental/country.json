@@ -1,0 +1,19 @@
+{
+  "table_id": "country",
+  "enabled": true,
+  "bronze_table": "country",
+  "silver_table": "silver_country",
+  "cdc_contract_key": "cdc.public.country",
+  "silver_contract_key": "silver.country",
+  "checkpoint_name": "country_silver_generic",
+  "primary_keys": ["country_id"],
+  "dedupe_order_columns": ["last_update", "event_ts_ms", "bronze_offset"],
+  "merge_core_fields": ["country_id", "country", "last_update"],
+  "fk_references": [],
+  "bootstrap_hook": null,
+  "field_mappings": [
+    {"target": "country_id", "source_paths": ["after.country_id", "before.country_id"]},
+    {"target": "country", "source_paths": ["after.country", "before.country"]},
+    {"target": "last_update", "transform": "epoch_micros_to_timestamp", "source_paths": ["after.last_update", "before.last_update"]}
+  ]
+}
