@@ -1,6 +1,6 @@
 # Databricks CDC Lakehouse Lab
 
-End-to-end reference implementation of a Change Data Capture pipeline from the **dvdrental** PostgreSQL sample database into a Databricks medallion lakehouse (Bronze → Silver → Gold).
+End-to-end reference implementation of a Change Data Capture pipeline from the **dvdrental** PostgreSQL sample database into a Databricks medallion lakehouse (Bronze → Silver → Vault → Gold).
 
 Agent-system inspiration was borrowed from [agency-agents](https://github.com/msitarzewski/agency-agents/).
 
@@ -8,30 +8,54 @@ Agent-system inspiration was borrowed from [agency-agents](https://github.com/ms
 
 ```
 PostgreSQL dvdrental (WAL)
-  → Debezium Connect (topics: cdc.public.film, cdc.public.rental, cdc.public.payment)
+  → Debezium Connect (topics: cdc.public.* — all 15 tables)
     → Databricks Bronze (raw Debezium envelopes in Delta tables)
       → Databricks Silver (current-state via MERGE, schema evolution)
-        → dbt Gold (business-ready models with data quality tests)
+        → Databricks Vault (Data Vault 2.0: Hubs / Links / Satellites / PIT / Bridge)
+          → dbt Gold (business-ready models with data quality tests)
 ```
 
-### Source Tables (PostgreSQL dvdrental)
+### Source Tables (PostgreSQL dvdrental — all 15)
+
+**Reference / Dimension**
+
+| Table | Notes |
+|-------|-------|
+| `public.country` | Lookup |
+| `public.city` | → country |
+| `public.address` | → city |
+| `public.language` | Film language lookup |
+| `public.category` | Film category lookup |
+| `public.actor` | Actor dimension |
+| `public.store` | Store dimension |
+| `public.staff` | Staff dimension → address, store |
+| `public.customer` | Customer dimension → address, store |
+
+**Transaction / Fact**
 
 | Table | Changes captured |
 |-------|-----------------|
 | `public.film` | Updates: rental_rate, rental_duration, replacement_cost |
+| `public.film_actor` | Junction: film ↔ actor |
+| `public.film_category` | Junction: film ↔ category |
+| `public.inventory` | Film copies per store |
 | `public.rental` | Inserts: new rentals; Updates: return_date set on return |
 | `public.payment` | Inserts: payments for completed rentals |
 
-### Medallion Tables (Databricks Unity Catalog)
+### Databricks Unity Catalog Tables
 
-| Layer | Table | Merge key |
-|-------|-------|-----------|
-| Bronze | `workspace.bronze.film` | — |
-| Bronze | `workspace.bronze.rental` | — |
-| Bronze | `workspace.bronze.payment` | — |
+| Layer | Table | Merge / hash key |
+|-------|-------|-----------------|
+| Bronze | `workspace.bronze.*` (15 tables) | — |
 | Silver | `workspace.silver.silver_film` | film_id |
 | Silver | `workspace.silver.silver_rental` | rental_id |
 | Silver | `workspace.silver.silver_payment` | payment_id |
+| Silver | `workspace.silver.silver_*` (12 ref tables) | entity PK |
+| Vault | `workspace.vault.hub_*` (13 hubs) | SHA-256 hash key |
+| Vault | `workspace.vault.lnk_*` (17 links) | composite hash key |
+| Vault | `workspace.vault.sat_*` (14 satellites) | hub hash key + load_date |
+| Vault | `workspace.vault.pit_*` (4 PIT tables) | hub hash key + snapshot_date |
+| Vault | `workspace.vault.brg_*` (2 bridge tables) | — |
 | Gold | `workspace.gold.gold_film` | film_id |
 | Gold | `workspace.gold.gold_rental` | rental_id |
 | Monitoring | `workspace.monitoring.schema_drift_log` | — |
@@ -83,7 +107,7 @@ python3 generators/load_generator.py
 
 ### 4. Databricks Pipeline
 
-Run the Bronze notebook first, then all three Silver notebooks in parallel:
+Run the Bronze notebook first, then Silver notebooks in parallel, then Vault notebooks:
 
 ```bash
 # One-command full migration + E2E test (discovers ngrok, resets tables,
@@ -121,14 +145,19 @@ generators/
   load_products_generator.py    Film attribute updates
 
 notebooks/
-  bronze/NB_ingest_to_bronze.ipynb          Kafka → Bronze Delta (topic pattern cdc.public.*)
-  silver/NB_process_to_silver.ipynb         Bronze rental → silver.silver_rental
-  silver/NB_process_products_silver.ipynb   Bronze film → silver.silver_film
-  silver/NB_process_payment_silver.ipynb    Bronze payment → silver.silver_payment
-  helpers/NB_catalog_helpers.ipynb          Table/schema creation utilities
-  helpers/NB_schema_drift_helpers.ipynb     Schema drift detection + alerting
-  helpers/NB_schema_contracts.ipynb         Expected schema definitions (Bronze/Silver/Gold)
-  helpers/NB_reset_tables.ipynb             Drop all tables + clear checkpoints
+  bronze/NB_ingest_to_bronze.ipynb              Kafka → Bronze Delta (topic pattern cdc.public.*)
+  silver/NB_process_to_silver.ipynb             Bronze rental → silver.silver_rental
+  silver/NB_process_products_silver.ipynb       Bronze film → silver.silver_film
+  silver/NB_process_payment_silver.ipynb        Bronze payment → silver.silver_payment
+  vault/NB_dv_metadata.ipynb                    DV 2.0 config parser + hash key / DDL helpers  [planned]
+  vault/NB_ingest_to_hubs.ipynb                 Silver → 13 Hub tables (SHA-256 insert-only)   [planned]
+  vault/NB_ingest_to_links.ipynb                Silver → 17 Link tables (insert-only)          [planned]
+  vault/NB_ingest_to_satellites.ipynb           Silver → 14 Satellites (append-only, DIFF_HK)  [planned]
+  vault/NB_dv_business_vault.ipynb              PIT tables + Bridge tables                      [planned]
+  helpers/NB_catalog_helpers.ipynb              Table/schema creation utilities
+  helpers/NB_schema_drift_helpers.ipynb         Schema drift detection + alerting
+  helpers/NB_schema_contracts.ipynb             Expected schema definitions (Bronze/Silver/Gold)
+  helpers/NB_reset_tables.ipynb                 Drop all tables + clear checkpoints
 
 cdc_gold/                       dbt project for Gold models
 skills/docker-databricks-lab-ops/scripts/
@@ -225,10 +254,12 @@ LIMIT 10;
 `Orders-ingest-job.yaml` defines the **dvdrental ingest job** (ID: `574281734474239`):
 
 - **Schedule**: every 5 minutes (`56 4/5 * * * ?`, Europe/Belgrade)
-- **Ingest_to_Bronze**: reads from Kafka, writes `bronze.{film,rental,payment}`
-- **ingest_Film_To_Silver** ┐
-- **ingest_Rental_To_Silver** ├ run in parallel after Bronze succeeds
-- **ingest_Payment_To_Silver** ┘
+- **Ingest_to_Bronze**: reads from Kafka, writes all 15 `bronze.*` tables
+- **ingest_*_To_Silver** — all 15 Silver tasks run in parallel after Bronze succeeds
+- **NB_ingest_to_hubs** ┐
+- **NB_ingest_to_links** ├ Vault tasks run in sequence after Silver (planned)
+- **NB_ingest_to_satellites** ┘
+- **NB_dv_business_vault** — PIT + Bridge after satellites complete (planned)
 - **Git source**: `https://github.com/alexeyban/databricks-lab` branch `main`
 
 Update the job via API after changing the YAML:

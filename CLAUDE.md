@@ -4,12 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Databricks CDC Lakehouse Lab — an end-to-end reference implementation of a Change Data Capture pipeline from the **dvdrental** PostgreSQL sample database into a Databricks medallion lakehouse (Bronze → Silver → Gold). It doubles as a working demo and a starting template for production CDC pipelines.
+This is a Databricks CDC Lakehouse Lab — an end-to-end reference implementation of a Change Data Capture pipeline from the **dvdrental** PostgreSQL sample database into a Databricks medallion lakehouse (Bronze → Silver → Vault → Gold). It doubles as a working demo and a starting template for production CDC pipelines.
 
-**Source tables captured via Debezium:**
-- `film` — catalogue dimension (updates: pricing, duration)
-- `rental` — primary transaction (inserts: new rentals; updates: return_date set)
-- `payment` — financial transactions for rentals (inserts only)
+**All 15 source tables captured via Debezium:**
+
+Reference / Dimension: `country`, `city`, `address`, `language`, `category`, `actor`, `store`, `staff`, `customer`
+
+Transaction / Fact: `film`, `film_actor`, `film_category`, `inventory`, `rental`, `payment`
 
 ## Local Infrastructure
 
@@ -69,10 +70,11 @@ dbt run            # run models only
 
 ```
 PostgreSQL dvdrental (WAL)
-  → Debezium Connect (Kafka topics: cdc.public.film, cdc.public.rental, cdc.public.payment)
+  → Debezium Connect (Kafka topics: cdc.public.* — all 15 tables)
     → Databricks Bronze (raw Debezium envelopes in Delta tables)
       → Databricks Silver (current-state via MERGE, with schema evolution)
-        → dbt Gold (business-ready models with data quality tests)
+        → Databricks Vault (Data Vault 2.0: Hubs / Links / Satellites / PIT / Bridge)
+          → dbt Gold (business-ready models with data quality tests)
 ```
 
 ### Notebooks
@@ -81,6 +83,11 @@ PostgreSQL dvdrental (WAL)
 - **`notebooks/silver/NB_process_to_silver.ipynb`**: Debezium MERGE into `silver.silver_rental` (merge key: `rental_id`)
 - **`notebooks/silver/NB_process_products_silver.ipynb`**: Debezium MERGE into `silver.silver_film` (merge key: `film_id`)
 - **`notebooks/silver/NB_process_payment_silver.ipynb`**: Debezium MERGE into `silver.silver_payment` (merge key: `payment_id`)
+- **`notebooks/vault/NB_dv_metadata.ipynb`** *(planned)*: DV 2.0 config loader + SHA-256 hash key / DIFF_HASH / DDL helpers
+- **`notebooks/vault/NB_ingest_to_hubs.ipynb`** *(planned)*: Silver → 13 Hubs (insert-only MERGE, watermarked)
+- **`notebooks/vault/NB_ingest_to_links.ipynb`** *(planned)*: Silver → 17 Links (insert-only MERGE, depends on Hubs)
+- **`notebooks/vault/NB_ingest_to_satellites.ipynb`** *(planned)*: Silver → 14 Satellites (append-only via DIFF_HK change detection)
+- **`notebooks/vault/NB_dv_business_vault.ipynb`** *(planned)*: PIT tables (daily snapshot spine) + Bridge tables
 - **`notebooks/helpers/NB_schema_drift_helpers.ipynb`**: Schema drift detection with configurable policies (`strict`, `additive_only`, `permissive`) and alerting (Slack, Teams, email)
 - **`notebooks/helpers/NB_catalog_helpers.ipynb`**: Table/schema creation utilities (`create_silver_table_rental/film/payment`, `build_merge_clauses`, `execute_merge`)
 - **`notebooks/helpers/NB_schema_contracts.ipynb`**: Expected schema definitions for all Bronze/Silver/Gold layers
@@ -89,12 +96,16 @@ PostgreSQL dvdrental (WAL)
 
 | Layer | Table | Key |
 |-------|-------|-----|
-| Bronze | workspace.bronze.film | — |
-| Bronze | workspace.bronze.rental | — |
-| Bronze | workspace.bronze.payment | — |
+| Bronze | workspace.bronze.* (15 tables) | — |
 | Silver | workspace.silver.silver_film | film_id |
 | Silver | workspace.silver.silver_rental | rental_id |
 | Silver | workspace.silver.silver_payment | payment_id |
+| Silver | workspace.silver.silver_* (12 ref tables) | entity PK |
+| Vault | workspace.vault.hub_* (13 hubs) | SHA-256 HK |
+| Vault | workspace.vault.lnk_* (17 links) | composite HK |
+| Vault | workspace.vault.sat_* (14 satellites) | HK + LOAD_DATE |
+| Vault | workspace.vault.pit_* (4 PITs) | HK + snapshot_date |
+| Vault | workspace.vault.brg_* (2 bridges) | — |
 | Gold | workspace.gold.gold_film | film_id |
 | Gold | workspace.gold.gold_rental | rental_id |
 | Monitoring | workspace.monitoring.schema_drift_log | — |
@@ -112,7 +123,13 @@ expr("cast(conv(hex(unbase64(raw_value)), 16, 10) as double) / pow(10, scale)")
 
 ### Orchestration
 
-`Orders-ingest-job.yaml` defines the Databricks workflow: Bronze ingest runs first, then all three Silver tasks run in parallel after it succeeds.
+`Orders-ingest-job.yaml` defines the Databricks workflow: Bronze ingest runs first, then all 15 Silver tasks run in parallel after it succeeds, then Vault notebooks run in sequence (Hubs → Links + Satellites in parallel → Business Vault).
+
+### DV 2.0 Design
+
+Full vault layer model and auto-generator design: `design/dv2/`
+- `DV2_VAULT_LAYER_PLAN.md` — 13 hubs, 17 links, 14 satellites, 4 PITs, 2 bridges; all design decisions locked
+- `DV2_GENERATOR_DESIGN.md` — 7-step generator tool (schema analysis → classification → artifact generation → human review → validation → apply)
 
 ## Agent System
 
