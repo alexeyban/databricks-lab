@@ -19,7 +19,7 @@ Tracks which tasks have been started and completed so agents can resume correctl
 | TASK_11 | `generators/dv_generator/steps/step7_applier.py` | ✅ Done | |
 | TASK_12 | `generators/dv_generator/main.py` | ✅ Done | |
 | TASK_13 | `generators/dv_generator/llm_client.py` | ✅ Done | |
-| TASK_14 | `generators/dv_generator/steps/step2b_ai_classifier.py` | ⬜ Not started | |
+| TASK_14 | `generators/dv_generator/steps/step2b_ai_classifier.py` | ✅ Done | |
 
 **Side deliverable**: `pipeline_configs/silver/dvdrental/*.json` — 15 Silver config files created during TASK_04.
 

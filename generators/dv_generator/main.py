@@ -17,6 +17,7 @@ from .decision_logger import DecisionLogger
 from .session import Session, STEPS
 from .steps.step1_analyzer import SchemaAnalyzer
 from .steps.step2_rule_engine import RuleEngine
+from .steps.step2b_ai_classifier import AIClassifier
 from .steps.step3_artifact_gen import ArtifactGenerator
 from .steps.step3b_notebook_gen import NotebookGenerator
 from .steps.step4_doc_gen import DocGenerator
@@ -63,6 +64,22 @@ def _run_pipeline(session: Session, logger: DecisionLogger, args: argparse.Names
         f"[step2] Classified: {len(model.hubs)} hubs, "
         f"{len(model.links)} links, {len(model.satellites)} satellites"
     )
+
+    # ------------------------------------------------------------------ #
+    # Step 2b — AI semantic classifier (optional, skipped with --no-ai)  #
+    # ------------------------------------------------------------------ #
+    if not args.no_ai:
+        try:
+            ai_classifier = AIClassifier(tables, model, session, logger)
+            model = ai_classifier.run()
+            print(
+                f"[step2b] AI merge: {len(model.hubs)} hubs, "
+                f"{len(model.links)} links, {len(model.satellites)} satellites"
+            )
+        except (EnvironmentError, ValueError) as exc:
+            print(f"[step2b] Skipped (env not configured): {exc}")
+    else:
+        print("[step2b] Skipped (--no-ai)")
 
     # ------------------------------------------------------------------ #
     # Step 3 — Artifact generation (dv_model_draft.json + templates)     #
@@ -156,6 +173,12 @@ def _parse_args() -> argparse.Namespace:
         "--dry-run",
         action="store_true",
         help="Run all steps but skip writing artifacts to repo in step7",
+    )
+    parser.add_argument(
+        "--no-ai",
+        action="store_true",
+        dest="no_ai",
+        help="Skip step2b AI classifier and use heuristic-only output",
     )
     return parser.parse_args()
 
