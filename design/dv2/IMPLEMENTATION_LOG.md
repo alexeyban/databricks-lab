@@ -11,13 +11,13 @@ Tracks which tasks have been started and completed so agents can resume correctl
 | TASK_03 | `generators/dv_generator/session.py` | ✅ Done | |
 | TASK_04 | `generators/dv_generator/steps/step1_analyzer.py` | ✅ Done | dvdrental Silver configs created in pipeline_configs/silver/dvdrental/ |
 | TASK_05 | `generators/dv_generator/steps/step2_rule_engine.py` | ✅ Done | |
-| TASK_06 | `generators/dv_generator/steps/step3_artifact_gen.py` | ⬜ Not started | |
-| TASK_07 | `generators/dv_generator/steps/step3b_notebook_gen.py` | ⬜ Not started | |
-| TASK_08 | `generators/dv_generator/steps/step4_doc_gen.py` | ⬜ Not started | |
-| TASK_09 | `generators/dv_generator/steps/step5_review.py` | ⬜ Not started | |
-| TASK_10 | `generators/dv_generator/steps/step6_validator.py` | ⬜ Not started | |
-| TASK_11 | `generators/dv_generator/steps/step7_applier.py` | ⬜ Not started | |
-| TASK_12 | `generators/dv_generator/main.py` | ⬜ Not started | |
+| TASK_06 | `generators/dv_generator/steps/step3_artifact_gen.py` | ✅ Done | |
+| TASK_07 | `generators/dv_generator/steps/step3b_notebook_gen.py` | ✅ Done | |
+| TASK_08 | `generators/dv_generator/steps/step4_doc_gen.py` | ✅ Done | |
+| TASK_09 | `generators/dv_generator/steps/step5_review.py` | ✅ Done | |
+| TASK_10 | `generators/dv_generator/steps/step6_validator.py` | ✅ Done | |
+| TASK_11 | `generators/dv_generator/steps/step7_applier.py` | ✅ Done | |
+| TASK_12 | `generators/dv_generator/main.py` | ✅ Done | |
 | TASK_13 | `generators/dv_generator/llm_client.py` | ✅ Done | |
 | TASK_14 | `generators/dv_generator/steps/step2b_ai_classifier.py` | ⬜ Not started | |
 

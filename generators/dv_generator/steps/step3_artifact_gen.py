@@ -29,19 +29,19 @@ DEFAULT_PIT_TABLES = [
     {
         "name": "PIT_RENTAL",
         "hub": "HUB_RENTAL",
-        "satellites": ["SAT_RENTAL_STATUS"],
+        "satellites": ["SAT_RENTAL_CORE"],
         "snapshot_grain": "daily",
     },
     {
         "name": "PIT_CUSTOMER",
         "hub": "HUB_CUSTOMER",
-        "satellites": ["SAT_CUSTOMER_PROFILE"],
+        "satellites": ["SAT_CUSTOMER_CORE"],
         "snapshot_grain": "daily",
     },
     {
         "name": "PIT_PAYMENT",
         "hub": "HUB_PAYMENT",
-        "satellites": ["SAT_PAYMENT_DETAIL"],
+        "satellites": ["SAT_PAYMENT_CORE", "SAT_PAYMENT_PRICING"],
         "snapshot_grain": "daily",
     },
 ]
