@@ -38,6 +38,7 @@ GIT_URL = "https://github.com/alexeyban/databricks-lab"
 GIT_BRANCH = "main"
 CATALOG = "workspace"
 CHECKPOINT_ROOT = "/Volumes/workspace/default/mnt/checkpoints"
+MODEL_PATH = "/Volumes/workspace/default/mnt/pipeline_configs/datavault/dv_model.json"
 
 SILVER_TABLES = [
     "actor", "address", "category", "city", "country",
@@ -148,18 +149,18 @@ def build_vault_job() -> JobSettings:
     tasks = [
         _task("vault_Ingest_Hubs",
               "notebooks/vault/NB_ingest_to_hubs",
-              {"CATALOG": CATALOG, "VAULT_SCHEMA": "vault"}),
+              {"CATALOG": CATALOG, "VAULT_SCHEMA": "vault", "MODEL_PATH": MODEL_PATH}),
         _task("vault_Ingest_Links",
               "notebooks/vault/NB_ingest_to_links",
-              {"CATALOG": CATALOG, "VAULT_SCHEMA": "vault"},
+              {"CATALOG": CATALOG, "VAULT_SCHEMA": "vault", "MODEL_PATH": MODEL_PATH},
               depends_on=["vault_Ingest_Hubs"]),
         _task("vault_Ingest_Satellites",
               "notebooks/vault/NB_ingest_to_satellites",
-              {"CATALOG": CATALOG, "VAULT_SCHEMA": "vault"},
+              {"CATALOG": CATALOG, "VAULT_SCHEMA": "vault", "MODEL_PATH": MODEL_PATH},
               depends_on=["vault_Ingest_Hubs"]),
         _task("vault_Business_Vault",
               "notebooks/vault/NB_dv_business_vault",
-              {"CATALOG": CATALOG, "VAULT_SCHEMA": "vault"},
+              {"CATALOG": CATALOG, "VAULT_SCHEMA": "vault", "MODEL_PATH": MODEL_PATH},
               depends_on=["vault_Ingest_Links", "vault_Ingest_Satellites"]),
     ]
     return _base_settings("dvdrental-vault", tasks)
