@@ -52,11 +52,167 @@ resources:
           timeout_seconds: 0
           email_notifications: {}
           webhook_notifications: {}
+        - task_key: ingest_Actor_To_Silver
+          depends_on:
+            - task_key: Ingest_to_Bronze
+          run_if: ALL_SUCCESS
+          notebook_task:
+            notebook_path: notebooks/silver/NB_process_to_silver_generic
+            base_parameters:
+              TABLE_ID: actor
+            source: GIT
+          timeout_seconds: 0
+          email_notifications: {}
+          webhook_notifications: {}
+        - task_key: ingest_Address_To_Silver
+          depends_on:
+            - task_key: Ingest_to_Bronze
+          run_if: ALL_SUCCESS
+          notebook_task:
+            notebook_path: notebooks/silver/NB_process_to_silver_generic
+            base_parameters:
+              TABLE_ID: address
+            source: GIT
+          timeout_seconds: 0
+          email_notifications: {}
+          webhook_notifications: {}
+        - task_key: ingest_Category_To_Silver
+          depends_on:
+            - task_key: Ingest_to_Bronze
+          run_if: ALL_SUCCESS
+          notebook_task:
+            notebook_path: notebooks/silver/NB_process_to_silver_generic
+            base_parameters:
+              TABLE_ID: category
+            source: GIT
+          timeout_seconds: 0
+          email_notifications: {}
+          webhook_notifications: {}
+        - task_key: ingest_City_To_Silver
+          depends_on:
+            - task_key: Ingest_to_Bronze
+          run_if: ALL_SUCCESS
+          notebook_task:
+            notebook_path: notebooks/silver/NB_process_to_silver_generic
+            base_parameters:
+              TABLE_ID: city
+            source: GIT
+          timeout_seconds: 0
+          email_notifications: {}
+          webhook_notifications: {}
+        - task_key: ingest_Country_To_Silver
+          depends_on:
+            - task_key: Ingest_to_Bronze
+          run_if: ALL_SUCCESS
+          notebook_task:
+            notebook_path: notebooks/silver/NB_process_to_silver_generic
+            base_parameters:
+              TABLE_ID: country
+            source: GIT
+          timeout_seconds: 0
+          email_notifications: {}
+          webhook_notifications: {}
+        - task_key: ingest_Customer_To_Silver
+          depends_on:
+            - task_key: Ingest_to_Bronze
+          run_if: ALL_SUCCESS
+          notebook_task:
+            notebook_path: notebooks/silver/NB_process_to_silver_generic
+            base_parameters:
+              TABLE_ID: customer
+            source: GIT
+          timeout_seconds: 0
+          email_notifications: {}
+          webhook_notifications: {}
+        - task_key: ingest_FilmActor_To_Silver
+          depends_on:
+            - task_key: Ingest_to_Bronze
+          run_if: ALL_SUCCESS
+          notebook_task:
+            notebook_path: notebooks/silver/NB_process_to_silver_generic
+            base_parameters:
+              TABLE_ID: film_actor
+            source: GIT
+          timeout_seconds: 0
+          email_notifications: {}
+          webhook_notifications: {}
+        - task_key: ingest_FilmCategory_To_Silver
+          depends_on:
+            - task_key: Ingest_to_Bronze
+          run_if: ALL_SUCCESS
+          notebook_task:
+            notebook_path: notebooks/silver/NB_process_to_silver_generic
+            base_parameters:
+              TABLE_ID: film_category
+            source: GIT
+          timeout_seconds: 0
+          email_notifications: {}
+          webhook_notifications: {}
+        - task_key: ingest_Inventory_To_Silver
+          depends_on:
+            - task_key: Ingest_to_Bronze
+          run_if: ALL_SUCCESS
+          notebook_task:
+            notebook_path: notebooks/silver/NB_process_to_silver_generic
+            base_parameters:
+              TABLE_ID: inventory
+            source: GIT
+          timeout_seconds: 0
+          email_notifications: {}
+          webhook_notifications: {}
+        - task_key: ingest_Language_To_Silver
+          depends_on:
+            - task_key: Ingest_to_Bronze
+          run_if: ALL_SUCCESS
+          notebook_task:
+            notebook_path: notebooks/silver/NB_process_to_silver_generic
+            base_parameters:
+              TABLE_ID: language
+            source: GIT
+          timeout_seconds: 0
+          email_notifications: {}
+          webhook_notifications: {}
+        - task_key: ingest_Staff_To_Silver
+          depends_on:
+            - task_key: Ingest_to_Bronze
+          run_if: ALL_SUCCESS
+          notebook_task:
+            notebook_path: notebooks/silver/NB_process_to_silver_generic
+            base_parameters:
+              TABLE_ID: staff
+            source: GIT
+          timeout_seconds: 0
+          email_notifications: {}
+          webhook_notifications: {}
+        - task_key: ingest_Store_To_Silver
+          depends_on:
+            - task_key: Ingest_to_Bronze
+          run_if: ALL_SUCCESS
+          notebook_task:
+            notebook_path: notebooks/silver/NB_process_to_silver_generic
+            base_parameters:
+              TABLE_ID: store
+            source: GIT
+          timeout_seconds: 0
+          email_notifications: {}
+          webhook_notifications: {}
         - task_key: vault_Ingest_Hubs
           depends_on:
             - task_key: ingest_Rental_To_Silver
             - task_key: ingest_Film_To_Silver
             - task_key: ingest_Payment_To_Silver
+            - task_key: ingest_Actor_To_Silver
+            - task_key: ingest_Address_To_Silver
+            - task_key: ingest_Category_To_Silver
+            - task_key: ingest_City_To_Silver
+            - task_key: ingest_Country_To_Silver
+            - task_key: ingest_Customer_To_Silver
+            - task_key: ingest_FilmActor_To_Silver
+            - task_key: ingest_FilmCategory_To_Silver
+            - task_key: ingest_Inventory_To_Silver
+            - task_key: ingest_Language_To_Silver
+            - task_key: ingest_Staff_To_Silver
+            - task_key: ingest_Store_To_Silver
           run_if: ALL_SUCCESS
           notebook_task:
             notebook_path: notebooks/vault/NB_ingest_to_hubs
