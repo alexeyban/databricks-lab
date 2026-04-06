@@ -1,0 +1,56 @@
+{
+  "session_id": "20260405_200923",
+  "session_dir": "generated/dv_sessions/20260405_200923",
+  "created_at": "2026-04-05T20:09:23.013136+00:00",
+  "completed_steps": [
+    "step1_analyzer",
+    "step2_rule_engine",
+    "step3_artifact_gen",
+    "step3b_notebook_gen",
+    "step4_doc_gen",
+    "step5_review",
+    "step6_validator",
+    "step7_applier"
+  ],
+  "current_step": "step7_applier",
+  "status": "completed",
+  "metadata": {
+    "step1_analyzer": {
+      "table_count": 15
+    },
+    "step2_rule_engine": {
+      "hubs": 13,
+      "links": 19,
+      "satellites": 15
+    },
+    "step3_artifact_gen": {
+      "hubs": 13,
+      "links": 19,
+      "satellites": 15,
+      "pit_tables": 4,
+      "bridge_tables": 2
+    },
+    "step6_validator": {
+      "errors": 0,
+      "warnings": 8,
+      "diff_summary": {
+        "hubs_changed": 0,
+        "links_changed": 0,
+        "satellites_changed": 0,
+        "pit_tables_changed": 0,
+        "bridge_tables_changed": 0
+      }
+    },
+    "step7_applier": {
+      "config_written": "pipeline_configs/datavault/dv_model.json",
+      "notebooks_copied": [
+        "NB_dv_business_vault.ipynb",
+        "NB_dv_metadata.ipynb",
+        "NB_ingest_to_hubs.ipynb",
+        "NB_ingest_to_links.ipynb",
+        "NB_ingest_to_satellites.ipynb"
+      ],
+      "warnings": 8
+    }
+  }
+}

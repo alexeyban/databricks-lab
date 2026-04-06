@@ -1,0 +1,55 @@
+{
+  "passed": true,
+  "error_count": 0,
+  "warning_count": 8,
+  "errors": [],
+  "warnings": [
+    {
+      "code": "W2",
+      "entity": "SAT_CATEGORY_CORE",
+      "message": "Satellite has only 1 tracked column \u2014 consider merging with another satellite"
+    },
+    {
+      "code": "W2",
+      "entity": "SAT_CITY_CORE",
+      "message": "Satellite has only 1 tracked column \u2014 consider merging with another satellite"
+    },
+    {
+      "code": "W2",
+      "entity": "SAT_COUNTRY_CORE",
+      "message": "Satellite has only 1 tracked column \u2014 consider merging with another satellite"
+    },
+    {
+      "code": "W2",
+      "entity": "SAT_INVENTORY",
+      "message": "Satellite has only 1 tracked column \u2014 consider merging with another satellite"
+    },
+    {
+      "code": "W2",
+      "entity": "SAT_LANGUAGE_CORE",
+      "message": "Satellite has only 1 tracked column \u2014 consider merging with another satellite"
+    },
+    {
+      "code": "W2",
+      "entity": "SAT_PAYMENT_CORE",
+      "message": "Satellite has only 1 tracked column \u2014 consider merging with another satellite"
+    },
+    {
+      "code": "W2",
+      "entity": "SAT_PAYMENT_PRICING",
+      "message": "Satellite has only 1 tracked column \u2014 consider merging with another satellite"
+    },
+    {
+      "code": "W2",
+      "entity": "SAT_STORE",
+      "message": "Satellite has only 1 tracked column \u2014 consider merging with another satellite"
+    }
+  ],
+  "diff_summary": {
+    "hubs_changed": 0,
+    "links_changed": 0,
+    "satellites_changed": 0,
+    "pit_tables_changed": 0,
+    "bridge_tables_changed": 0
+  }
+}

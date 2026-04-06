@@ -61,7 +61,7 @@ class LLMClient:
     DEFAULT_MODELS = {
         "claude": "claude-sonnet-4-6",
         "openai_compatible": "gpt-4o",
-        "databricks": "databricks-claude-3-7-sonnet",
+        "databricks": "databricks-meta-llama-3-3-70b-instruct",
     }
 
     def __init__(self) -> None:

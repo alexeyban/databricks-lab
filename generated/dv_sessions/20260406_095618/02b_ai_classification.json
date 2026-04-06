@@ -1,0 +1,777 @@
+{
+  "hubs": [
+    {
+      "name": "HUB_ACTOR",
+      "target_table": "vault.hub_actor",
+      "source_table": "silver.silver_actor",
+      "business_key_columns": [
+        "actor_id"
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.actor",
+      "enabled": true,
+      "confidence": "HIGH",
+      "rules_fired": [
+        "AI:Each actor is a unique business entity."
+      ]
+    },
+    {
+      "name": "HUB_ADDRESS",
+      "target_table": "vault.hub_address",
+      "source_table": "silver.silver_address",
+      "business_key_columns": [
+        "address_id"
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.address",
+      "enabled": true,
+      "confidence": "HIGH",
+      "rules_fired": [
+        "AI:Each address is a unique business entity."
+      ]
+    },
+    {
+      "name": "HUB_CATEGORY",
+      "target_table": "vault.hub_category",
+      "source_table": "silver.silver_category",
+      "business_key_columns": [
+        "category_id"
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.category",
+      "enabled": true,
+      "confidence": "HIGH",
+      "rules_fired": [
+        "AI:Each category is a unique business entity."
+      ]
+    },
+    {
+      "name": "HUB_CITY",
+      "target_table": "vault.hub_city",
+      "source_table": "silver.silver_city",
+      "business_key_columns": [
+        "city_id"
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.city",
+      "enabled": true,
+      "confidence": "HIGH",
+      "rules_fired": [
+        "AI:Each city is a unique business entity."
+      ]
+    },
+    {
+      "name": "HUB_COUNTRY",
+      "target_table": "vault.hub_country",
+      "source_table": "silver.silver_country",
+      "business_key_columns": [
+        "country_id"
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.country",
+      "enabled": true,
+      "confidence": "HIGH",
+      "rules_fired": [
+        "AI:Each country is a unique business entity."
+      ]
+    },
+    {
+      "name": "HUB_CUSTOMER",
+      "target_table": "vault.hub_customer",
+      "source_table": "silver.silver_customer",
+      "business_key_columns": [
+        "customer_id"
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.customer",
+      "enabled": true,
+      "confidence": "HIGH",
+      "rules_fired": [
+        "AI:Each customer is a unique business entity."
+      ]
+    },
+    {
+      "name": "HUB_FILM",
+      "target_table": "vault.hub_film",
+      "source_table": "silver.silver_film",
+      "business_key_columns": [
+        "film_id"
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.film",
+      "enabled": true,
+      "confidence": "HIGH",
+      "rules_fired": [
+        "AI:Each film is a unique business entity."
+      ]
+    },
+    {
+      "name": "HUB_INVENTORY",
+      "target_table": "vault.hub_inventory",
+      "source_table": "silver.silver_inventory",
+      "business_key_columns": [
+        "inventory_id"
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.inventory",
+      "enabled": true,
+      "confidence": "HIGH",
+      "rules_fired": [
+        "AI:Each inventory item is a unique business entity."
+      ]
+    },
+    {
+      "name": "HUB_LANGUAGE",
+      "target_table": "vault.hub_language",
+      "source_table": "silver.silver_language",
+      "business_key_columns": [
+        "language_id"
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.language",
+      "enabled": true,
+      "confidence": "HIGH",
+      "rules_fired": [
+        "AI:Each language is a unique business entity."
+      ]
+    },
+    {
+      "name": "HUB_PAYMENT",
+      "target_table": "vault.hub_payment",
+      "source_table": "silver.silver_payment",
+      "business_key_columns": [
+        "payment_id"
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.payment",
+      "enabled": true,
+      "confidence": "HIGH",
+      "rules_fired": [
+        "AI:Each payment is a unique business entity."
+      ]
+    },
+    {
+      "name": "HUB_RENTAL",
+      "target_table": "vault.hub_rental",
+      "source_table": "silver.silver_rental",
+      "business_key_columns": [
+        "rental_id"
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.rental",
+      "enabled": true,
+      "confidence": "HIGH",
+      "rules_fired": [
+        "AI:Each rental is a unique business entity."
+      ]
+    },
+    {
+      "name": "HUB_STAFF",
+      "target_table": "vault.hub_staff",
+      "source_table": "silver.silver_staff",
+      "business_key_columns": [
+        "staff_id"
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.staff",
+      "enabled": true,
+      "confidence": "HIGH",
+      "rules_fired": [
+        "AI:Each staff member is a unique business entity."
+      ]
+    },
+    {
+      "name": "HUB_STORE",
+      "target_table": "vault.hub_store",
+      "source_table": "silver.silver_store",
+      "business_key_columns": [
+        "store_id"
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.store",
+      "enabled": true,
+      "confidence": "HIGH",
+      "rules_fired": [
+        "AI:Each store is a unique business entity."
+      ]
+    }
+  ],
+  "links": [
+    {
+      "name": "LNK_FILM_ACTOR",
+      "target_table": "vault.lnk_film_actor",
+      "source_table": "silver.silver_film_actor",
+      "hub_references": [
+        {
+          "hub": "HUB_FILM",
+          "source_column": "film_id"
+        },
+        {
+          "hub": "HUB_ACTOR",
+          "source_column": "actor_id"
+        }
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.film_actor",
+      "enabled": true,
+      "confidence": "HIGH",
+      "rules_fired": [
+        "AI:A film can have multiple actors, and an actor can be in multiple films."
+      ]
+    },
+    {
+      "name": "LNK_FILM_CATEGORY",
+      "target_table": "vault.lnk_film_category",
+      "source_table": "silver.silver_film_category",
+      "hub_references": [
+        {
+          "hub": "HUB_FILM",
+          "source_column": "film_id"
+        },
+        {
+          "hub": "HUB_CATEGORY",
+          "source_column": "category_id"
+        }
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.film_category",
+      "enabled": true,
+      "confidence": "HIGH",
+      "rules_fired": [
+        "AI:A film can have multiple categories, and a category can have multiple films."
+      ]
+    },
+    {
+      "name": "LNK_INVENTORY_FILM",
+      "target_table": "vault.lnk_inventory_film",
+      "source_table": "silver.silver_inventory",
+      "hub_references": [
+        {
+          "hub": "HUB_INVENTORY",
+          "source_column": "inventory_id"
+        },
+        {
+          "hub": "HUB_FILM",
+          "source_column": "film_id"
+        }
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.inventory",
+      "enabled": true,
+      "confidence": "HIGH",
+      "rules_fired": [
+        "AI:An inventory item is associated with a film."
+      ]
+    },
+    {
+      "name": "LNK_INVENTORY_STORE",
+      "target_table": "vault.lnk_inventory_store",
+      "source_table": "silver.silver_inventory",
+      "hub_references": [
+        {
+          "hub": "HUB_INVENTORY",
+          "source_column": "inventory_id"
+        },
+        {
+          "hub": "HUB_STORE",
+          "source_column": "store_id"
+        }
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.inventory",
+      "enabled": true,
+      "confidence": "HIGH",
+      "rules_fired": [
+        "AI:An inventory item is associated with a store."
+      ]
+    },
+    {
+      "name": "LNK_PAYMENT_RENTAL",
+      "target_table": "vault.lnk_payment_rental",
+      "source_table": "silver.silver_payment",
+      "hub_references": [
+        {
+          "hub": "HUB_PAYMENT",
+          "source_column": "payment_id"
+        },
+        {
+          "hub": "HUB_RENTAL",
+          "source_column": "rental_id"
+        }
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.payment",
+      "enabled": true,
+      "confidence": "HIGH",
+      "rules_fired": [
+        "AI:A payment is associated with a rental."
+      ]
+    },
+    {
+      "name": "LNK_PAYMENT_CUSTOMER",
+      "target_table": "vault.lnk_payment_customer",
+      "source_table": "silver.silver_payment",
+      "hub_references": [
+        {
+          "hub": "HUB_PAYMENT",
+          "source_column": "payment_id"
+        },
+        {
+          "hub": "HUB_CUSTOMER",
+          "source_column": "customer_id"
+        }
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.payment",
+      "enabled": true,
+      "confidence": "HIGH",
+      "rules_fired": [
+        "AI:A payment is associated with a customer."
+      ]
+    },
+    {
+      "name": "LNK_RENTAL_INVENTORY",
+      "target_table": "vault.lnk_rental_inventory",
+      "source_table": "silver.silver_rental",
+      "hub_references": [
+        {
+          "hub": "HUB_RENTAL",
+          "source_column": "rental_id"
+        },
+        {
+          "hub": "HUB_INVENTORY",
+          "source_column": "inventory_id"
+        }
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.rental",
+      "enabled": true,
+      "confidence": "HIGH",
+      "rules_fired": [
+        "AI:A rental is associated with an inventory item."
+      ]
+    },
+    {
+      "name": "LNK_RENTAL_CUSTOMER",
+      "target_table": "vault.lnk_rental_customer",
+      "source_table": "silver.silver_rental",
+      "hub_references": [
+        {
+          "hub": "HUB_RENTAL",
+          "source_column": "rental_id"
+        },
+        {
+          "hub": "HUB_CUSTOMER",
+          "source_column": "customer_id"
+        }
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.rental",
+      "enabled": true,
+      "confidence": "HIGH",
+      "rules_fired": [
+        "AI:A rental is associated with a customer."
+      ]
+    },
+    {
+      "name": "LNK_RENTAL_STAFF",
+      "target_table": "vault.lnk_rental_staff",
+      "source_table": "silver.silver_rental",
+      "hub_references": [
+        {
+          "hub": "HUB_RENTAL",
+          "source_column": "rental_id"
+        },
+        {
+          "hub": "HUB_STAFF",
+          "source_column": "staff_id"
+        }
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.rental",
+      "enabled": true,
+      "confidence": "HIGH",
+      "rules_fired": [
+        "AI:A rental is associated with a staff member."
+      ]
+    },
+    {
+      "name": "LNK_STORE_STAFF",
+      "target_table": "vault.lnk_store_staff",
+      "source_table": "silver.silver_store",
+      "hub_references": [
+        {
+          "hub": "HUB_STORE",
+          "source_column": "store_id"
+        },
+        {
+          "hub": "HUB_STAFF",
+          "source_column": "manager_staff_id"
+        }
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.store",
+      "enabled": true,
+      "confidence": "HIGH",
+      "rules_fired": [
+        "AI:A store is associated with a staff member."
+      ]
+    },
+    {
+      "name": "LNK_STORE_ADDRESS",
+      "target_table": "vault.lnk_store_address",
+      "source_table": "silver.silver_store",
+      "hub_references": [
+        {
+          "hub": "HUB_STORE",
+          "source_column": "store_id"
+        },
+        {
+          "hub": "HUB_ADDRESS",
+          "source_column": "address_id"
+        }
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.store",
+      "enabled": true,
+      "confidence": "HIGH",
+      "rules_fired": [
+        "AI:A store is associated with an address."
+      ]
+    },
+    {
+      "name": "LNK_STAFF_ADDRESS",
+      "target_table": "vault.lnk_staff_address",
+      "source_table": "silver.silver_staff",
+      "hub_references": [
+        {
+          "hub": "HUB_STAFF",
+          "source_column": "staff_id"
+        },
+        {
+          "hub": "HUB_ADDRESS",
+          "source_column": "address_id"
+        }
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.staff",
+      "enabled": true,
+      "confidence": "HIGH",
+      "rules_fired": [
+        "AI:A staff member is associated with an address."
+      ]
+    },
+    {
+      "name": "LNK_CITY_COUNTRY",
+      "target_table": "vault.lnk_city_country",
+      "source_table": "silver.silver_city",
+      "hub_references": [
+        {
+          "hub": "HUB_CITY",
+          "source_column": "city_id"
+        },
+        {
+          "hub": "HUB_COUNTRY",
+          "source_column": "country_id"
+        }
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.city",
+      "enabled": true,
+      "confidence": "HIGH",
+      "rules_fired": [
+        "AI:A city is associated with a country."
+      ]
+    },
+    {
+      "name": "LNK_ADDRESS_CITY",
+      "target_table": "vault.lnk_address_city",
+      "source_table": "silver.silver_address",
+      "hub_references": [
+        {
+          "hub": "HUB_ADDRESS",
+          "source_column": "address_id"
+        },
+        {
+          "hub": "HUB_CITY",
+          "source_column": "city_id"
+        }
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.address",
+      "enabled": true,
+      "confidence": "HIGH",
+      "rules_fired": [
+        "AI:An address is associated with a city."
+      ]
+    }
+  ],
+  "satellites": [
+    {
+      "name": "SAT_ACTOR_DETAILS",
+      "target_table": "vault.sat_actor_details",
+      "parent_hub": "HUB_ACTOR",
+      "source_table": "silver.silver_actor",
+      "hub_key_source_column": "actor_id",
+      "tracked_columns": [
+        "first_name",
+        "last_name"
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.actor",
+      "split_reason": "These columns are not part of the business key and can change over time.",
+      "enabled": true,
+      "confidence": "LOW",
+      "rules_fired": [
+        "AI:This satellite tracks the details of an actor.",
+        "MERGE:ai_only"
+      ]
+    },
+    {
+      "name": "SAT_ADDRESS_DETAILS",
+      "target_table": "vault.sat_address_details",
+      "parent_hub": "HUB_ADDRESS",
+      "source_table": "silver.silver_address",
+      "hub_key_source_column": "address_id",
+      "tracked_columns": [
+        "address",
+        "address2",
+        "district",
+        "postal_code",
+        "phone"
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.address",
+      "split_reason": "These columns are not part of the business key and can change over time.",
+      "enabled": true,
+      "confidence": "LOW",
+      "rules_fired": [
+        "AI:This satellite tracks the details of an address.",
+        "MERGE:ai_only"
+      ]
+    },
+    {
+      "name": "SAT_CATEGORY_DETAILS",
+      "target_table": "vault.sat_category_details",
+      "parent_hub": "HUB_CATEGORY",
+      "source_table": "silver.silver_category",
+      "hub_key_source_column": "category_id",
+      "tracked_columns": [
+        "name"
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.category",
+      "split_reason": "This column is not part of the business key and can change over time.",
+      "enabled": true,
+      "confidence": "LOW",
+      "rules_fired": [
+        "AI:This satellite tracks the details of a category.",
+        "MERGE:ai_only"
+      ]
+    },
+    {
+      "name": "SAT_CITY_DETAILS",
+      "target_table": "vault.sat_city_details",
+      "parent_hub": "HUB_CITY",
+      "source_table": "silver.silver_city",
+      "hub_key_source_column": "city_id",
+      "tracked_columns": [
+        "city"
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.city",
+      "split_reason": "This column is not part of the business key and can change over time.",
+      "enabled": true,
+      "confidence": "LOW",
+      "rules_fired": [
+        "AI:This satellite tracks the details of a city.",
+        "MERGE:ai_only"
+      ]
+    },
+    {
+      "name": "SAT_COUNTRY_DETAILS",
+      "target_table": "vault.sat_country_details",
+      "parent_hub": "HUB_COUNTRY",
+      "source_table": "silver.silver_country",
+      "hub_key_source_column": "country_id",
+      "tracked_columns": [
+        "country"
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.country",
+      "split_reason": "This column is not part of the business key and can change over time.",
+      "enabled": true,
+      "confidence": "LOW",
+      "rules_fired": [
+        "AI:This satellite tracks the details of a country.",
+        "MERGE:ai_only"
+      ]
+    },
+    {
+      "name": "SAT_CUSTOMER_DETAILS",
+      "target_table": "vault.sat_customer_details",
+      "parent_hub": "HUB_CUSTOMER",
+      "source_table": "silver.silver_customer",
+      "hub_key_source_column": "customer_id",
+      "tracked_columns": [
+        "first_name",
+        "last_name",
+        "email",
+        "activebool",
+        "active"
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.customer",
+      "split_reason": "These columns are not part of the business key and can change over time.",
+      "enabled": true,
+      "confidence": "LOW",
+      "rules_fired": [
+        "AI:This satellite tracks the details of a customer.",
+        "MERGE:ai_only"
+      ]
+    },
+    {
+      "name": "SAT_FILM_DETAILS",
+      "target_table": "vault.sat_film_details",
+      "parent_hub": "HUB_FILM",
+      "source_table": "silver.silver_film",
+      "hub_key_source_column": "film_id",
+      "tracked_columns": [
+        "title",
+        "description",
+        "release_year",
+        "length",
+        "rating",
+        "special_features",
+        "fulltext"
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.film",
+      "split_reason": "These columns are not part of the business key and can change over time.",
+      "enabled": true,
+      "confidence": "LOW",
+      "rules_fired": [
+        "AI:This satellite tracks the details of a film.",
+        "MERGE:ai_only"
+      ]
+    },
+    {
+      "name": "SAT_INVENTORY_DETAILS",
+      "target_table": "vault.sat_inventory_details",
+      "parent_hub": "HUB_INVENTORY",
+      "source_table": "silver.silver_inventory",
+      "hub_key_source_column": "inventory_id",
+      "tracked_columns": [],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.inventory",
+      "split_reason": "There are no columns to track for inventory.",
+      "enabled": true,
+      "confidence": "LOW",
+      "rules_fired": [
+        "AI:This satellite is a marker for the inventory hub.",
+        "MERGE:ai_only"
+      ]
+    },
+    {
+      "name": "SAT_LANGUAGE_DETAILS",
+      "target_table": "vault.sat_language_details",
+      "parent_hub": "HUB_LANGUAGE",
+      "source_table": "silver.silver_language",
+      "hub_key_source_column": "language_id",
+      "tracked_columns": [
+        "name"
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.language",
+      "split_reason": "This column is not part of the business key and can change over time.",
+      "enabled": true,
+      "confidence": "LOW",
+      "rules_fired": [
+        "AI:This satellite tracks the details of a language.",
+        "MERGE:ai_only"
+      ]
+    },
+    {
+      "name": "SAT_PAYMENT_DETAILS",
+      "target_table": "vault.sat_payment_details",
+      "parent_hub": "HUB_PAYMENT",
+      "source_table": "silver.silver_payment",
+      "hub_key_source_column": "payment_id",
+      "tracked_columns": [
+        "amount",
+        "payment_date"
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.payment",
+      "split_reason": "These columns are not part of the business key and can change over time.",
+      "enabled": true,
+      "confidence": "LOW",
+      "rules_fired": [
+        "AI:This satellite tracks the details of a payment.",
+        "MERGE:ai_only"
+      ]
+    },
+    {
+      "name": "SAT_RENTAL_DETAILS",
+      "target_table": "vault.sat_rental_details",
+      "parent_hub": "HUB_RENTAL",
+      "source_table": "silver.silver_rental",
+      "hub_key_source_column": "rental_id",
+      "tracked_columns": [
+        "rental_date",
+        "return_date"
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.rental",
+      "split_reason": "These columns are not part of the business key and can change over time.",
+      "enabled": true,
+      "confidence": "LOW",
+      "rules_fired": [
+        "AI:This satellite tracks the details of a rental.",
+        "MERGE:ai_only"
+      ]
+    },
+    {
+      "name": "SAT_STAFF_DETAILS",
+      "target_table": "vault.sat_staff_details",
+      "parent_hub": "HUB_STAFF",
+      "source_table": "silver.silver_staff",
+      "hub_key_source_column": "staff_id",
+      "tracked_columns": [
+        "first_name",
+        "last_name",
+        "email",
+        "active",
+        "username"
+      ],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.staff",
+      "split_reason": "These columns are not part of the business key and can change over time.",
+      "enabled": true,
+      "confidence": "LOW",
+      "rules_fired": [
+        "AI:This satellite tracks the details of a staff member.",
+        "MERGE:ai_only"
+      ]
+    },
+    {
+      "name": "SAT_STORE_DETAILS",
+      "target_table": "vault.sat_store_details",
+      "parent_hub": "HUB_STORE",
+      "source_table": "silver.silver_store",
+      "hub_key_source_column": "store_id",
+      "tracked_columns": [],
+      "load_date_column": "last_updated_dt",
+      "record_source": "cdc.dvdrental.store",
+      "split_reason": "There are no columns to track for store.",
+      "enabled": true,
+      "confidence": "LOW",
+      "rules_fired": [
+        "AI:This satellite is a marker for the store hub.",
+        "MERGE:ai_only"
+      ]
+    }
+  ],
+  "pit_tables": [],
+  "bridge_tables": []
+}

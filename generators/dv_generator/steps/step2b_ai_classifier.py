@@ -353,8 +353,17 @@ class AIClassifier:
         statement = client.statement_execution.execute_statement(
             warehouse_id=self.warehouse_id,
             statement=f"SELECT * FROM {source_table} LIMIT {self.SAMPLE_LIMIT}",
-            wait_timeout="30s",
+            wait_timeout="50s",
         )
+        from databricks.sdk.service.sql import StatementState
+        if statement.status.state != StatementState.SUCCEEDED or statement.manifest is None:
+            # Table likely doesn't exist yet — return empty sample gracefully
+            err = statement.status.error
+            print(
+                f"    [step2b] Sample fetch skipped for {source_table}: "
+                f"{err.message if err else statement.status.state}"
+            )
+            return []
         columns = [c.name for c in statement.manifest.schema.columns]
         rows = []
         for row in (statement.result.data_array or []):

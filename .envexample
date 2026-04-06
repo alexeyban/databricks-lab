@@ -7,6 +7,8 @@ DATABRICKS_WAREHOUSE_ID=
 #   claude             — Anthropic API directly (requires LLM_API_KEY)
 #   openai_compatible  — any OpenAI-compatible endpoint (requires LLM_API_KEY + LLM_BASE_URL)
 #   databricks         — Databricks Foundation Model APIs via workspace token (no separate key needed)
+#                        Default model: databricks-meta-llama-3-3-70b-instruct
+#                        Override via LLM_MODEL (e.g. databricks-llama-4-maverick, databricks-gpt-5-4)
 LLM_PROVIDER=databricks
 LLM_API_KEY=
 LLM_BASE_URL=
