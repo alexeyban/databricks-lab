@@ -149,11 +149,11 @@ notebooks/
   silver/NB_process_to_silver.ipynb             Bronze rental → silver.silver_rental
   silver/NB_process_products_silver.ipynb       Bronze film → silver.silver_film
   silver/NB_process_payment_silver.ipynb        Bronze payment → silver.silver_payment
-  vault/NB_dv_metadata.ipynb                    DV 2.0 config parser + hash key / DDL helpers  [planned]
-  vault/NB_ingest_to_hubs.ipynb                 Silver → 13 Hub tables (SHA-256 insert-only)   [planned]
-  vault/NB_ingest_to_links.ipynb                Silver → 17 Link tables (insert-only)          [planned]
-  vault/NB_ingest_to_satellites.ipynb           Silver → 14 Satellites (append-only, DIFF_HK)  [planned]
-  vault/NB_dv_business_vault.ipynb              PIT tables + Bridge tables                      [planned]
+  vault/NB_dv_metadata.ipynb                    DV 2.0 config parser + hash key / DDL helpers
+  vault/NB_ingest_to_hubs.ipynb                 Silver → 13 Hub tables (SHA-256 insert-only)
+  vault/NB_ingest_to_links.ipynb                Silver → 19 Link tables (insert-only)
+  vault/NB_ingest_to_satellites.ipynb           Silver → 15 Satellites (append-only, DIFF_HK)
+  vault/NB_dv_business_vault.ipynb              PIT tables + Bridge tables
   helpers/NB_catalog_helpers.ipynb              Table/schema creation utilities
   helpers/NB_schema_drift_helpers.ipynb         Schema drift detection + alerting
   helpers/NB_schema_contracts.ipynb             Expected schema definitions (Bronze/Silver/Gold)
@@ -194,6 +194,43 @@ Features:
 - Dynamic MERGE rebuilt from current table schema at runtime
 - Debezium `NUMERIC` decoding: `cast(conv(hex(unbase64(value)), 16, 10) as double) / pow(10, scale)`
 - All schema changes logged to `workspace.monitoring.schema_drift_log`
+
+### Vault — NB_dv_metadata
+
+Loads `pipeline_configs/datavault/dv_model.json` and exposes shared helpers:
+
+- `load_dv_config()` — returns parsed DVModel config dict
+- `hub_hash_expr(bk_col)` — SHA-256 hash key: `sha2(concat_ws("||", upper(trim(col.cast("string")))), 256)`
+- `diff_hash_expr(tracked_cols)` — DIFF_HK for satellite change detection (NULL-safe)
+- DDL helpers: `ensure_hub_schema`, `ensure_link_schema`, `ensure_sat_schema`
+
+### Vault — NB_ingest_to_hubs
+
+Insert-only MERGE from Silver → 13 Hub tables. Watermarked by `LOAD_DATE` to avoid reprocessing.
+
+- Source config: `pipeline_configs/datavault/dv_model.json`
+- Pattern: `MERGE INTO vault.hub_X USING source ON HK_X = HK_X WHEN NOT MATCHED THEN INSERT`
+
+### Vault — NB_ingest_to_links
+
+Insert-only MERGE from Silver → 19 Link tables. Runs after Hubs are populated.
+
+- Composite hash key from all FK columns
+- Each link record references ≥ 2 hub hash keys
+
+### Vault — NB_ingest_to_satellites
+
+Append-only insert from Silver → 15 Satellite tables. Uses DIFF_HK change detection to avoid duplicate rows.
+
+- `LEFT JOIN` latest DIFF_HK per hub key; insert only where DIFF_HK changed or is new
+- No end-dating — history preserved by LOAD_DATE
+
+### Vault — NB_dv_business_vault
+
+Builds PIT (Point-in-Time) tables and Bridge tables from vault layer data.
+
+- **PIT tables** (4): daily snapshot spine for HUB_FILM, HUB_RENTAL, HUB_CUSTOMER, HUB_PAYMENT
+- **Bridge tables** (2): BRG_RENTAL_FILM (rental → inventory → film path), BRG_FILM_CAST (film → actor)
 
 ### Helpers
 
@@ -257,9 +294,9 @@ LIMIT 10;
 - **Ingest_to_Bronze**: reads from Kafka, writes all 15 `bronze.*` tables
 - **ingest_*_To_Silver** — all 15 Silver tasks run in parallel after Bronze succeeds
 - **NB_ingest_to_hubs** ┐
-- **NB_ingest_to_links** ├ Vault tasks run in sequence after Silver (planned)
+- **NB_ingest_to_links** ├ Vault tasks run in sequence after Silver
 - **NB_ingest_to_satellites** ┘
-- **NB_dv_business_vault** — PIT + Bridge after satellites complete (planned)
+- **NB_dv_business_vault** — PIT + Bridge after satellites complete
 - **Git source**: `https://github.com/alexeyban/databricks-lab` branch `main`
 
 Update the job via API after changing the YAML:
@@ -310,6 +347,53 @@ cp .envexample .env
 ```
 
 `.env`, `.databrickscfg`, and generated logs are git-ignored.
+
+## DV 2.0 Generator
+
+`generators/dv_generator/` is a **meta-tool** that automates DV 2.0 model creation from any Silver layer schema. It replaces manual vault design with a 7-step pipeline:
+
+```
+step1: schema analysis    → 01_schema_analysis.json
+step2: heuristic rules    → 02_classification.json
+step2b: AI classifier     → 02b_merged_classification.json  (optional, needs LLM env)
+step3: artifact gen       → 03_dv_model_draft.json + query_templates/
+step3b: notebook gen      → notebooks/vault/*.ipynb
+step4: documentation      → 04_diagram.drawio + 04_documentation.md
+step5: human review       → 05_review_notebook.ipynb  ← PAUSE
+step6: validation         → 06_validation_report.json
+step7: apply              → pipeline_configs/datavault/dv_model.json + notebooks/vault/
+```
+
+### Quick start
+
+```bash
+# Full run — analyzes Silver configs, generates notebooks, pauses for review
+python -m generators.dv_generator.main --analyze \
+  --config-dir pipeline_configs/silver/dvdrental --no-ai
+
+# After reviewing 05_review_notebook.ipynb in Jupyter:
+python -m generators.dv_generator.main --resume <session_id> \
+  --from-step step6_validator
+
+# With AI semantic classifier (requires LLM_API_KEY + DATABRICKS_WAREHOUSE_ID):
+python -m generators.dv_generator.main --analyze \
+  --config-dir pipeline_configs/silver/dvdrental
+```
+
+### Session output
+
+All intermediate files land in `generated/dv_sessions/YYYYMMDD_HHMMSS/`.
+Sessions are resumable from any step with `--resume <id> --from-step <step>`.
+
+### Key files
+
+| File | Description |
+|------|-------------|
+| `pipeline_configs/datavault/dv_model.json` | Final approved DV 2.0 config |
+| `pipeline_configs/silver/dvdrental/*.json` | Silver table configs (15 files) |
+| `design/dv2/DV2_VAULT_LAYER_PLAN.md` | Full vault design (hubs/links/sats/PITs/bridges) |
+| `design/dv2/DV2_GENERATOR_DESIGN.md` | Generator architecture decisions |
+| `design/dv2/IMPLEMENTATION_LOG.md` | Module completion status |
 
 ## Agent System
 

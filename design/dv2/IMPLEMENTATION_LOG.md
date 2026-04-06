@@ -23,12 +23,21 @@ Tracks which tasks have been started and completed so agents can resume correctl
 
 **Side deliverable**: `pipeline_configs/silver/dvdrental/*.json` — 15 Silver config files created during TASK_04.
 
-## Resume instructions for next agent
+## Status: ALL TASKS COMPLETE ✅
 
-1. Read this file to find first `⬜ Not started` or `🔄 In progress` task
-2. Read `design/dv2/tasks/TASK_NN_*.md` for the spec of that task
-3. Read already-implemented files this task depends on to understand actual interfaces
-4. Implement the module, update status in this log to `✅ Done`, commit
+All 14 modules are implemented and the generator runs end-to-end.
+Generated output: `pipeline_configs/datavault/dv_model.json` + `notebooks/vault/` (5 notebooks).
+
+E2E test results (2026-04-06):
+- 19/19 tests passed (happy path, validation failures, error injection, caching, idempotency, CLI edge cases)
+- dvdrental model: 13 hubs, 19 links, 15 sats, 4 PITs, 2 bridges — 0 validation errors
+
+## What to do next
+
+See `ROADMAP.md` for prioritised next steps. Top items:
+1. Deploy vault notebooks to Databricks and validate against live Silver data
+2. Wire vault notebooks into `Orders-ingest-job.yaml`
+3. Run AI classifier (`step2b`) with real `LLM_API_KEY` + `DATABRICKS_WAREHOUSE_ID`
 
 ## Key design decisions (quick ref)
 

@@ -83,11 +83,11 @@ PostgreSQL dvdrental (WAL)
 - **`notebooks/silver/NB_process_to_silver.ipynb`**: Debezium MERGE into `silver.silver_rental` (merge key: `rental_id`)
 - **`notebooks/silver/NB_process_products_silver.ipynb`**: Debezium MERGE into `silver.silver_film` (merge key: `film_id`)
 - **`notebooks/silver/NB_process_payment_silver.ipynb`**: Debezium MERGE into `silver.silver_payment` (merge key: `payment_id`)
-- **`notebooks/vault/NB_dv_metadata.ipynb`** *(planned)*: DV 2.0 config loader + SHA-256 hash key / DIFF_HASH / DDL helpers
-- **`notebooks/vault/NB_ingest_to_hubs.ipynb`** *(planned)*: Silver → 13 Hubs (insert-only MERGE, watermarked)
-- **`notebooks/vault/NB_ingest_to_links.ipynb`** *(planned)*: Silver → 17 Links (insert-only MERGE, depends on Hubs)
-- **`notebooks/vault/NB_ingest_to_satellites.ipynb`** *(planned)*: Silver → 14 Satellites (append-only via DIFF_HK change detection)
-- **`notebooks/vault/NB_dv_business_vault.ipynb`** *(planned)*: PIT tables (daily snapshot spine) + Bridge tables
+- **`notebooks/vault/NB_dv_metadata.ipynb`**: DV 2.0 config loader + SHA-256 hash key / DIFF_HASH / DDL helpers
+- **`notebooks/vault/NB_ingest_to_hubs.ipynb`**: Silver → 13 Hubs (insert-only MERGE, watermarked)
+- **`notebooks/vault/NB_ingest_to_links.ipynb`**: Silver → 19 Links (insert-only MERGE, depends on Hubs)
+- **`notebooks/vault/NB_ingest_to_satellites.ipynb`**: Silver → 15 Satellites (append-only via DIFF_HK change detection)
+- **`notebooks/vault/NB_dv_business_vault.ipynb`**: 4 PIT tables (daily snapshot spine) + 2 Bridge tables
 - **`notebooks/helpers/NB_schema_drift_helpers.ipynb`**: Schema drift detection with configurable policies (`strict`, `additive_only`, `permissive`) and alerting (Slack, Teams, email)
 - **`notebooks/helpers/NB_catalog_helpers.ipynb`**: Table/schema creation utilities (`create_silver_table_rental/film/payment`, `build_merge_clauses`, `execute_merge`)
 - **`notebooks/helpers/NB_schema_contracts.ipynb`**: Expected schema definitions for all Bronze/Silver/Gold layers
@@ -128,8 +128,29 @@ expr("cast(conv(hex(unbase64(raw_value)), 16, 10) as double) / pow(10, scale)")
 ### DV 2.0 Design
 
 Full vault layer model and auto-generator design: `design/dv2/`
-- `DV2_VAULT_LAYER_PLAN.md` — 13 hubs, 17 links, 14 satellites, 4 PITs, 2 bridges; all design decisions locked
+- `DV2_VAULT_LAYER_PLAN.md` — 13 hubs, 19 links, 15 satellites, 4 PITs, 2 bridges; all design decisions locked
 - `DV2_GENERATOR_DESIGN.md` — 7-step generator tool (schema analysis → classification → artifact generation → human review → validation → apply)
+- `IMPLEMENTATION_LOG.md` — all 14 modules complete; generator is fully operational
+
+## DV 2.0 Generator
+
+The `generators/dv_generator/` meta-tool generates a complete DV 2.0 vault layer from Silver schema configs.
+
+```bash
+# Fresh run (steps 1-5, then pauses for human review)
+python -m generators.dv_generator.main --analyze \
+  --config-dir pipeline_configs/silver/dvdrental --no-ai
+
+# Resume after Jupyter review
+python -m generators.dv_generator.main --resume <session_id> --from-step step6_validator
+
+# Re-run a specific step
+python -m generators.dv_generator.main --resume <session_id> --from-step step3_artifact_gen
+```
+
+Key outputs already committed: `pipeline_configs/datavault/dv_model.json` (final config) and `notebooks/vault/` (5 vault notebooks).
+
+For full generator docs see `README.md § DV 2.0 Generator`.
 
 ## Agent System
 
