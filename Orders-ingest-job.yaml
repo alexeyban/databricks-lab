@@ -52,6 +52,49 @@ resources:
           timeout_seconds: 0
           email_notifications: {}
           webhook_notifications: {}
+        - task_key: vault_Ingest_Hubs
+          depends_on:
+            - task_key: ingest_Rental_To_Silver
+            - task_key: ingest_Film_To_Silver
+            - task_key: ingest_Payment_To_Silver
+          run_if: ALL_SUCCESS
+          notebook_task:
+            notebook_path: notebooks/vault/NB_ingest_to_hubs
+            source: GIT
+          timeout_seconds: 0
+          email_notifications: {}
+          webhook_notifications: {}
+        - task_key: vault_Ingest_Links
+          depends_on:
+            - task_key: vault_Ingest_Hubs
+          run_if: ALL_SUCCESS
+          notebook_task:
+            notebook_path: notebooks/vault/NB_ingest_to_links
+            source: GIT
+          timeout_seconds: 0
+          email_notifications: {}
+          webhook_notifications: {}
+        - task_key: vault_Ingest_Satellites
+          depends_on:
+            - task_key: vault_Ingest_Hubs
+          run_if: ALL_SUCCESS
+          notebook_task:
+            notebook_path: notebooks/vault/NB_ingest_to_satellites
+            source: GIT
+          timeout_seconds: 0
+          email_notifications: {}
+          webhook_notifications: {}
+        - task_key: vault_Business_Vault
+          depends_on:
+            - task_key: vault_Ingest_Links
+            - task_key: vault_Ingest_Satellites
+          run_if: ALL_SUCCESS
+          notebook_task:
+            notebook_path: notebooks/vault/NB_dv_business_vault
+            source: GIT
+          timeout_seconds: 0
+          email_notifications: {}
+          webhook_notifications: {}
       git_source:
         git_url: https://github.com/alexeyban/databricks-lab
         git_provider: gitHub
