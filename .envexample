@@ -3,9 +3,18 @@ DATABRICKS_TOKEN=dapiXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 DATABRICKS_WAREHOUSE_ID=
 
 # DV 2.0 Generator — AI classifier (step2b)
-# LLM_PROVIDER: claude (default) or openai_compatible
-LLM_PROVIDER=claude
+# LLM_PROVIDER options:
+#   claude             — Anthropic API directly (requires LLM_API_KEY)
+#   openai_compatible  — any OpenAI-compatible endpoint (requires LLM_API_KEY + LLM_BASE_URL)
+#   databricks         — Databricks Foundation Model APIs via workspace token (no separate key needed)
+LLM_PROVIDER=databricks
 LLM_API_KEY=
 LLM_BASE_URL=
 LLM_MODEL=
 LLM_MAX_TOKENS=4096
+
+# Databricks Genie space ID for semantic table enrichment (optional)
+# If set, Genie is asked semantic questions about each Silver table and the answers
+# are injected into the LLM classification prompt. Requires a pre-configured Genie
+# space with Silver tables registered and Databricks Assistant enabled.
+GENIE_SPACE_ID=

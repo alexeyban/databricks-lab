@@ -70,7 +70,8 @@ def _run_pipeline(session: Session, logger: DecisionLogger, args: argparse.Names
     # ------------------------------------------------------------------ #
     if not args.no_ai:
         try:
-            ai_classifier = AIClassifier(tables, model, session, logger)
+            ai_classifier = AIClassifier(tables, model, session, logger,
+                                          genie_space_id=args.genie_space_id)
             model = ai_classifier.run()
             print(
                 f"[step2b] AI merge: {len(model.hubs)} hubs, "
@@ -179,6 +180,13 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         dest="no_ai",
         help="Skip step2b AI classifier and use heuristic-only output",
+    )
+    parser.add_argument(
+        "--genie-space-id",
+        metavar="SPACE_ID",
+        dest="genie_space_id",
+        default=None,
+        help="Databricks Genie space ID for semantic table enrichment (overrides GENIE_SPACE_ID env var)",
     )
     return parser.parse_args()
 

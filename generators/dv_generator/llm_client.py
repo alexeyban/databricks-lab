@@ -31,15 +31,21 @@ class LLMError(Exception):
 
 
 class LLMClient:
-    """Configurable LLM client supporting Claude and OpenAI-compatible APIs.
+    """Configurable LLM client supporting Claude, OpenAI-compatible, and Databricks APIs.
 
     Configuration via env vars:
 
-    - ``LLM_PROVIDER``: ``claude`` or ``openai_compatible``  (default: ``claude``)
-    - ``LLM_API_KEY``: API key (or ``ANTHROPIC_API_KEY`` / ``OPENAI_API_KEY``)
-    - ``LLM_BASE_URL``: Override base URL for OpenAI-compatible endpoints
+    - ``LLM_PROVIDER``: ``claude`` | ``openai_compatible`` | ``databricks``  (default: ``claude``)
+    - ``LLM_API_KEY``: API key (or ``ANTHROPIC_API_KEY`` / ``OPENAI_API_KEY``).
+      Not required for ``databricks`` provider — uses ``DATABRICKS_TOKEN`` instead.
+    - ``LLM_BASE_URL``: Override base URL for OpenAI-compatible endpoints.
+      Not required for ``databricks`` — derived from ``DATABRICKS_HOST`` automatically.
     - ``LLM_MODEL``: Model name override
     - ``LLM_MAX_TOKENS``: Max response tokens (default: 4096)
+
+    **databricks provider**: calls Databricks Foundation Model APIs (OpenAI-compatible serving
+    endpoints) using the workspace credentials already in ``DATABRICKS_HOST`` +
+    ``DATABRICKS_TOKEN``. No separate API key needed.
 
     Usage::
 
@@ -55,28 +61,45 @@ class LLMClient:
     DEFAULT_MODELS = {
         "claude": "claude-sonnet-4-6",
         "openai_compatible": "gpt-4o",
+        "databricks": "databricks-claude-3-7-sonnet",
     }
 
     def __init__(self) -> None:
         self.provider = os.getenv("LLM_PROVIDER", "claude").lower()
-        self.api_key = (
-            os.getenv("LLM_API_KEY")
-            or os.getenv("ANTHROPIC_API_KEY")
-            or os.getenv("OPENAI_API_KEY")
-        )
-        self.base_url = os.getenv("LLM_BASE_URL")
+
+        if self.provider == "databricks":
+            # Use Databricks workspace credentials — no separate LLM_API_KEY needed
+            databricks_host = os.getenv("DATABRICKS_HOST", "").rstrip("/")
+            self.api_key = os.getenv("DATABRICKS_TOKEN")
+            self.base_url = (
+                os.getenv("LLM_BASE_URL")
+                or (f"{databricks_host}/serving-endpoints" if databricks_host else None)
+            )
+            if not self.api_key or not databricks_host:
+                raise ValueError(
+                    "DATABRICKS_HOST and DATABRICKS_TOKEN must be set for LLM_PROVIDER=databricks"
+                )
+        else:
+            self.api_key = (
+                os.getenv("LLM_API_KEY")
+                or os.getenv("ANTHROPIC_API_KEY")
+                or os.getenv("OPENAI_API_KEY")
+            )
+            self.base_url = os.getenv("LLM_BASE_URL")
+            if not self.api_key:
+                raise ValueError(
+                    "Set LLM_API_KEY (or ANTHROPIC_API_KEY / OPENAI_API_KEY) before using LLMClient"
+                )
+
         self.model = os.getenv("LLM_MODEL") or self.DEFAULT_MODELS.get(
             self.provider, "claude-sonnet-4-6"
         )
         self.max_tokens = int(os.getenv("LLM_MAX_TOKENS", "4096"))
 
-        if not self.api_key:
+        if self.provider not in ("claude", "openai_compatible", "databricks"):
             raise ValueError(
-                "Set LLM_API_KEY (or ANTHROPIC_API_KEY / OPENAI_API_KEY) before using LLMClient"
-            )
-        if self.provider not in ("claude", "openai_compatible"):
-            raise ValueError(
-                f"LLM_PROVIDER must be 'claude' or 'openai_compatible', got: {self.provider!r}"
+                f"LLM_PROVIDER must be 'claude', 'openai_compatible', or 'databricks', "
+                f"got: {self.provider!r}"
             )
 
     def complete_with_tools(
@@ -101,7 +124,7 @@ class LLMClient:
         """
         if self.provider == "claude":
             return self._complete_claude(messages, tools, system)
-        return self._complete_openai(messages, tools, system)
+        return self._complete_openai(messages, tools, system)  # openai_compatible + databricks
 
     # ------------------------------------------------------------------
     # Provider implementations

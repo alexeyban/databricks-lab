@@ -2,16 +2,22 @@
 DV 2.0 Generator — AI Semantic Classifier + Merge (TASK_14)
 
 Runs an LLM-powered classification of Silver table schemas, optionally enriched
-with live data samples from Databricks SQL, then merges the AI model with the
-heuristic rule engine output.
+with live data samples from Databricks SQL and/or Genie semantic insights, then
+merges the AI model with the heuristic rule engine output.
 
 Agreement between AI + heuristics → HIGH confidence.
 Disagreement (one side only) → LOW confidence + logged in decisions.log for human review.
 
 Outputs:
-  {session_dir}/data_samples/{table}_sample.json  — cached sample rows per table
-  {session_dir}/02b_ai_classification.json        — raw AI DVModel (before merge)
-  {session_dir}/02b_merged_classification.json    — final merged DVModel (fed to step3)
+  {session_dir}/data_samples/{table}_sample.json   — cached sample rows per table
+  {session_dir}/genie_insights/{table}_genie.json  — cached Genie enrichment (optional)
+  {session_dir}/02b_ai_classification.json         — raw AI DVModel (before merge)
+  {session_dir}/02b_merged_classification.json     — final merged DVModel (fed to step3)
+
+Optional env vars:
+  GENIE_SPACE_ID — Databricks Genie space ID; if set, per-table semantic enrichment is added
+                   to the classification prompt. Requires a pre-configured Genie space with
+                   Silver tables registered and Databricks Assistant enabled.
 """
 from __future__ import annotations
 
@@ -126,7 +132,11 @@ Rules to follow:
 5. Use the data samples to understand actual business semantics, not just column names."""
 
 
-def _build_prompt(tables: list[TableDef], samples: dict[str, list[dict]]) -> str:
+def _build_prompt(
+    tables: list[TableDef],
+    samples: dict[str, list[dict]],
+    genie_insights: dict[str, str] | None = None,
+) -> str:
     sections = ["Classify the following Silver tables into a Data Vault 2.0 model.\n"]
     for table in tables:
         sections.append(f"## Table: {table.source_table}")
@@ -139,8 +149,114 @@ def _build_prompt(tables: list[TableDef], samples: dict[str, list[dict]]) -> str
         if sample:
             sections.append(f"Sample rows ({len(sample)} rows, showing first 5):")
             sections.append(json.dumps(sample[:5], default=str, indent=2))
+        if genie_insights and table.name in genie_insights:
+            sections.append("### Genie Insight (Databricks AI/BI analysis):")
+            sections.append(genie_insights[table.name])
         sections.append("")
     return "\n".join(sections)
+
+
+# ---------------------------------------------------------------------------
+# Genie enrichment (optional — requires GENIE_SPACE_ID env var)
+# ---------------------------------------------------------------------------
+
+class GenieEnricher:
+    """Ask Databricks Genie semantic questions about each Silver table.
+
+    Genie provides AI-powered natural-language analysis of Unity Catalog tables.
+    Its answers enrich the LLM classification prompt, improving accuracy without
+    replacing the structured tool-call classification step.
+
+    Prerequisites:
+    - A Genie space must be pre-configured in the Databricks workspace with the
+      Silver tables registered and Databricks Assistant enabled.
+    - A Pro or Serverless SQL warehouse associated with the space.
+
+    Results are cached per table in {session_dir}/genie_insights/ so subsequent
+    runs do not repeat the Genie API calls.
+    """
+
+    GENIE_INSIGHTS_DIR = "genie_insights"
+
+    # Questions asked per table in a single conversation thread
+    QUESTIONS = [
+        "In one sentence, what business entity or concept does this table represent?",
+        "Which column is the natural business key — the identifier a business person would use to refer to this entity?",
+        "Which columns change frequently (transactional) vs rarely (reference/descriptive)?",
+    ]
+
+    def __init__(self, space_id: str) -> None:
+        self.space_id = space_id
+
+    def enrich_all(
+        self, tables: list[TableDef], cache_dir: Path
+    ) -> dict[str, str]:
+        """Return {table_name: enrichment_text} for all tables, using cache when available."""
+        insights_dir = cache_dir / self.GENIE_INSIGHTS_DIR
+        insights_dir.mkdir(exist_ok=True)
+
+        try:
+            from databricks.sdk import WorkspaceClient
+            client = WorkspaceClient(
+                host=os.getenv("DATABRICKS_HOST"),
+                token=os.getenv("DATABRICKS_TOKEN"),
+            )
+        except ImportError as exc:
+            raise EnvironmentError(
+                "databricks-sdk is not installed. Run: pip install databricks-sdk"
+            ) from exc
+
+        insights: dict[str, str] = {}
+        for table in tables:
+            cache_file = insights_dir / f"{table.name}_genie.json"
+            if cache_file.exists():
+                insights[table.name] = json.loads(cache_file.read_text())
+            else:
+                try:
+                    text = self._ask_table(client, table)
+                    cache_file.write_text(json.dumps(text))
+                    insights[table.name] = text
+                except Exception as exc:
+                    # Non-fatal: log and continue without Genie insight for this table
+                    print(f"  [genie] Warning: could not enrich {table.name}: {exc}")
+        return insights
+
+    def _ask_table(self, client, table: TableDef) -> str:
+        """Open a Genie conversation for one table, ask all QUESTIONS, return combined answer."""
+        from databricks.sdk.service.dashboards import MessageStatus
+
+        first_q = f"I am looking at the table `{table.source_table}`. {self.QUESTIONS[0]}"
+
+        # Start conversation with first question
+        response = client.genie.start_conversation_and_wait(
+            space_id=self.space_id,
+            content=first_q,
+        )
+        conversation_id = response.conversation_id
+        answers: list[str] = [self._extract_text(response)]
+
+        # Ask remaining questions in the same conversation thread
+        for question in self.QUESTIONS[1:]:
+            msg = client.genie.create_message_and_wait(
+                space_id=self.space_id,
+                conversation_id=conversation_id,
+                content=question,
+            )
+            answers.append(self._extract_text(msg))
+
+        return "\n".join(
+            f"Q: {q}\nA: {a}"
+            for q, a in zip(self.QUESTIONS, answers)
+            if a
+        )
+
+    @staticmethod
+    def _extract_text(message) -> str:
+        """Pull the text content from a GenieMessage's attachments."""
+        for attachment in message.attachments or []:
+            if attachment.text and attachment.text.content:
+                return attachment.text.content.strip()
+        return ""
 
 
 # ---------------------------------------------------------------------------
@@ -160,6 +276,7 @@ class AIClassifier:
         heuristic_model: DVModel,
         session: Session,
         logger: DecisionLogger,
+        genie_space_id: str | None = None,
     ) -> None:
         self.tables = tables
         self.heuristic_model = heuristic_model
@@ -167,6 +284,8 @@ class AIClassifier:
         self.logger = logger
         self.warehouse_id = os.getenv("DATABRICKS_WAREHOUSE_ID")
         self.llm = LLMClient()
+        space_id = genie_space_id or os.getenv("GENIE_SPACE_ID")
+        self.genie_enricher = GenieEnricher(space_id) if space_id else None
 
     def run(self) -> DVModel:
         """Run AI classification and return merged DVModel."""
@@ -174,7 +293,8 @@ class AIClassifier:
             return self._load_merged()
 
         samples = self._fetch_all_samples()
-        ai_model = self._classify_with_ai(samples)
+        genie_insights = self._fetch_genie_insights()
+        ai_model = self._classify_with_ai(samples, genie_insights)
         merged_model = self._merge(ai_model)
 
         self._save_ai_model(ai_model)
@@ -242,12 +362,35 @@ class AIClassifier:
         return rows
 
     # ------------------------------------------------------------------
+    # Genie enrichment
+    # ------------------------------------------------------------------
+
+    def _fetch_genie_insights(self) -> dict[str, str] | None:
+        """Fetch Genie semantic insights for all tables (cached). Returns None if no enricher."""
+        if not self.genie_enricher:
+            return None
+        print("  [step2b] Fetching Genie insights...")
+        try:
+            insights = self.genie_enricher.enrich_all(
+                self.tables, self.session.session_dir
+            )
+            print(f"  [step2b] Genie enriched {len(insights)}/{len(self.tables)} tables")
+            return insights
+        except Exception as exc:
+            print(f"  [step2b] Genie enrichment failed, continuing without it: {exc}")
+            return None
+
+    # ------------------------------------------------------------------
     # AI classification
     # ------------------------------------------------------------------
 
-    def _classify_with_ai(self, samples: dict[str, list[dict]]) -> DVModel:
+    def _classify_with_ai(
+        self,
+        samples: dict[str, list[dict]],
+        genie_insights: dict[str, str] | None = None,
+    ) -> DVModel:
         """Build prompt, call LLM with tool, parse tool response into DVModel."""
-        prompt = _build_prompt(self.tables, samples)
+        prompt = _build_prompt(self.tables, samples, genie_insights)
         result = self.llm.complete_with_tools(
             messages=[Message(role="user", content=prompt)],
             tools=[DV_CLASSIFY_TOOL],
