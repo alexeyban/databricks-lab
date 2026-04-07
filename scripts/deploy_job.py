@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
-Deploy dvdrental pipeline as 4 separate Databricks jobs:
+Deploy dvdrental pipeline as 5 separate Databricks jobs:
 
   1. dvdrental-bronze      — Kafka → Bronze Delta (streaming)
   2. dvdrental-silver      — 15 parallel Bronze → Silver tasks
   3. dvdrental-vault       — Hubs → Links+Sats → Business Vault
   4. dvdrental-orchestrator — chains jobs 1→2→3 via run_job_task
+  5. dvdrental-dq-gdpr     — daily VACUUM, erasure processing, SLA checks
 
 Usage:
     set -a && source .env && set +a
@@ -21,11 +22,13 @@ import os
 
 from databricks.sdk import WorkspaceClient
 from databricks.sdk.service.jobs import (
+    CronSchedule,
     GitProvider,
     GitSource,
     JobEmailNotifications,
     JobSettings,
     NotebookTask,
+    PauseStatus,
     QueueSettings,
     RunJobTask,
     Source,
@@ -166,6 +169,76 @@ def build_vault_job() -> JobSettings:
     return _base_settings("dvdrental-vault", tasks)
 
 
+def build_dq_gdpr_job(webhook_url: str = "") -> JobSettings:
+    """
+    Task 4.5 — Daily DQ/GDPR maintenance job.
+
+    Tasks (all independent — run in parallel by default):
+    1. vacuum_bronze_tables     — VACUUM all 15 Bronze tables, RETAIN 720 hours
+    2. process_erasure_requests — run NB_process_erasure for each pending request
+    3. check_erasure_sla        — alert on requests older than 25 days
+    """
+    bronze_tables = [
+        "actor", "address", "category", "city", "country",
+        "customer", "film", "film_actor", "film_category",
+        "inventory", "language", "payment", "rental", "staff", "store",
+    ]
+    vacuum_sql = " ".join(
+        f"VACUUM {CATALOG}.bronze.{t} RETAIN 720 HOURS;"
+        for t in bronze_tables
+    )
+
+    tasks = [
+        # 1. VACUUM all Bronze tables (inline Python notebook task)
+        _task(
+            key="vacuum_bronze_tables",
+            notebook_path="notebooks/helpers/NB_catalog_helpers",
+            params={
+                "CATALOG": CATALOG,
+                # Execute vacuum via a widget-driven inline call
+                "_INLINE_VACUUM_SQL": vacuum_sql,
+            },
+        ),
+        # 2. Process pending erasure requests
+        _task(
+            key="process_erasure_requests",
+            notebook_path="notebooks/helpers/NB_process_erasure",
+            params={
+                "REQUEST_ID": "__BATCH__",  # Notebook handles batch mode when REQUEST_ID == __BATCH__
+                "CATALOG": CATALOG,
+                "DRY_RUN": "false",
+                "OPERATOR": "dvdrental-dq-gdpr-job",
+            },
+        ),
+        # 3. Check erasure SLA (alert on requests > 25 days old)
+        _task(
+            key="check_erasure_sla",
+            notebook_path="notebooks/helpers/NB_check_erasure_sla",
+            params={
+                "CATALOG": CATALOG,
+                "SLA_WARN_DAYS": "25",
+                "ALERT_CHANNEL": "webhook" if webhook_url else "log",
+                "WEBHOOK_URL": webhook_url,
+            },
+        ),
+    ]
+
+    return JobSettings(
+        name="dvdrental-dq-gdpr",
+        tasks=tasks,
+        git_source=GIT_SOURCE,
+        schedule=CronSchedule(
+            quartz_cron_expression="0 0 2 * * ?",  # daily at 02:00 UTC
+            timezone_id="UTC",
+            pause_status=PauseStatus.UNPAUSED,
+        ),
+        email_notifications=JobEmailNotifications(no_alert_for_skipped_runs=False),
+        timeout_seconds=0,
+        max_concurrent_runs=1,
+        queue=QueueSettings(enabled=True),
+    )
+
+
 def build_orchestrator_job(bronze_id: int, silver_id: int,
                            vault_id: int) -> JobSettings:
     tasks = [
@@ -195,6 +268,8 @@ def main() -> None:
                         help="Suffix for checkpoint paths to force a fresh start (e.g. 'v3')")
     parser.add_argument("--run", action="store_true",
                         help="Trigger the orchestrator immediately after deploying")
+    parser.add_argument("--webhook-url", default="",
+                        help="Slack/Teams webhook URL for DQ/GDPR alerts")
     args = parser.parse_args()
 
     w = WorkspaceClient(
@@ -208,14 +283,16 @@ def main() -> None:
 
     print("Deploying dvdrental pipeline jobs...")
 
-    bronze_id = _upsert_job(w, "dvdrental-bronze",
-                            build_bronze_job(args.kafka_bootstrap, checkpoint_root))
-    silver_id = _upsert_job(w, "dvdrental-silver",
-                            build_silver_job(checkpoint_root))
-    vault_id  = _upsert_job(w, "dvdrental-vault",
-                            build_vault_job())
-    orch_id   = _upsert_job(w, "dvdrental-orchestrator",
-                            build_orchestrator_job(bronze_id, silver_id, vault_id))
+    bronze_id  = _upsert_job(w, "dvdrental-bronze",
+                             build_bronze_job(args.kafka_bootstrap, checkpoint_root))
+    silver_id  = _upsert_job(w, "dvdrental-silver",
+                             build_silver_job(checkpoint_root))
+    vault_id   = _upsert_job(w, "dvdrental-vault",
+                             build_vault_job())
+    orch_id    = _upsert_job(w, "dvdrental-orchestrator",
+                             build_orchestrator_job(bronze_id, silver_id, vault_id))
+    dq_gdpr_id = _upsert_job(w, "dvdrental-dq-gdpr",
+                              build_dq_gdpr_job(args.webhook_url))
 
     host = os.environ["DATABRICKS_HOST"].rstrip("/")
     print(f"\nJobs deployed:")
@@ -223,6 +300,7 @@ def main() -> None:
     print(f"  Silver:       {host}/#job/{silver_id}")
     print(f"  Vault:        {host}/#job/{vault_id}")
     print(f"  Orchestrator: {host}/#job/{orch_id}")
+    print(f"  DQ/GDPR:      {host}/#job/{dq_gdpr_id}  (daily 02:00 UTC)")
 
     if args.run:
         run = w.jobs.run_now(job_id=orch_id)

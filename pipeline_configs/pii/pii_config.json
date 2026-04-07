@@ -1,0 +1,30 @@
+[
+  {"table": "silver.silver_customer", "column": "email",       "sensitivity": "pii_direct",   "subject_id_col": "customer_id", "encrypt": true,  "notes": "login identifier"},
+  {"table": "silver.silver_customer", "column": "first_name",  "sensitivity": "pii_direct",   "subject_id_col": "customer_id", "encrypt": true,  "notes": "given name"},
+  {"table": "silver.silver_customer", "column": "last_name",   "sensitivity": "pii_direct",   "subject_id_col": "customer_id", "encrypt": true,  "notes": "family name"},
+  {"table": "silver.silver_customer", "column": "address_id",  "sensitivity": "pii_indirect", "subject_id_col": "customer_id", "encrypt": false, "notes": "FK to address — indirect PII"},
+
+  {"table": "silver.silver_staff", "column": "email",      "sensitivity": "pii_direct",   "subject_id_col": "staff_id", "encrypt": true,  "notes": "work email"},
+  {"table": "silver.silver_staff", "column": "first_name", "sensitivity": "pii_direct",   "subject_id_col": "staff_id", "encrypt": true,  "notes": "given name"},
+  {"table": "silver.silver_staff", "column": "last_name",  "sensitivity": "pii_direct",   "subject_id_col": "staff_id", "encrypt": true,  "notes": "family name"},
+  {"table": "silver.silver_staff", "column": "address_id", "sensitivity": "pii_indirect", "subject_id_col": "staff_id", "encrypt": false, "notes": "FK to address — indirect PII"},
+  {"table": "silver.silver_staff", "column": "picture",    "sensitivity": "pii_direct",   "subject_id_col": "staff_id", "encrypt": true,  "notes": "biometric / profile image"},
+
+  {"table": "silver.silver_address", "column": "address",     "sensitivity": "pii_direct", "subject_id_col": "address_id", "encrypt": true,  "notes": "street address line 1"},
+  {"table": "silver.silver_address", "column": "address2",    "sensitivity": "pii_direct", "subject_id_col": "address_id", "encrypt": true,  "notes": "street address line 2"},
+  {"table": "silver.silver_address", "column": "phone",       "sensitivity": "pii_direct", "subject_id_col": "address_id", "encrypt": true,  "notes": "contact phone number"},
+  {"table": "silver.silver_address", "column": "postal_code", "sensitivity": "pii_direct", "subject_id_col": "address_id", "encrypt": true,  "notes": "postal / zip code"},
+
+  {"table": "silver.silver_country",      "column": "*", "sensitivity": "non_pii", "subject_id_col": null, "encrypt": false, "notes": "reference data"},
+  {"table": "silver.silver_city",         "column": "*", "sensitivity": "non_pii", "subject_id_col": null, "encrypt": false, "notes": "reference data"},
+  {"table": "silver.silver_language",     "column": "*", "sensitivity": "non_pii", "subject_id_col": null, "encrypt": false, "notes": "reference data"},
+  {"table": "silver.silver_category",     "column": "*", "sensitivity": "non_pii", "subject_id_col": null, "encrypt": false, "notes": "reference data"},
+  {"table": "silver.silver_actor",        "column": "*", "sensitivity": "non_pii", "subject_id_col": null, "encrypt": false, "notes": "public figure — not PII in dvdrental context"},
+  {"table": "silver.silver_store",        "column": "*", "sensitivity": "non_pii", "subject_id_col": null, "encrypt": false, "notes": "business entity"},
+  {"table": "silver.silver_film",         "column": "*", "sensitivity": "non_pii", "subject_id_col": null, "encrypt": false, "notes": "product catalog"},
+  {"table": "silver.silver_film_actor",   "column": "*", "sensitivity": "non_pii", "subject_id_col": null, "encrypt": false, "notes": "junction table — no PII"},
+  {"table": "silver.silver_film_category","column": "*", "sensitivity": "non_pii", "subject_id_col": null, "encrypt": false, "notes": "junction table — no PII"},
+  {"table": "silver.silver_inventory",    "column": "*", "sensitivity": "non_pii", "subject_id_col": null, "encrypt": false, "notes": "stock reference"},
+  {"table": "silver.silver_rental",       "column": "*", "sensitivity": "non_pii", "subject_id_col": null, "encrypt": false, "notes": "transaction — customer_id is FK, not PII column itself"},
+  {"table": "silver.silver_payment",      "column": "*", "sensitivity": "non_pii", "subject_id_col": null, "encrypt": false, "notes": "transaction amounts — no direct PII"}
+]

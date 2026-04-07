@@ -13,6 +13,9 @@ clean-targets:
   - "target"
   - "dbt_packages"
 
+on-run-end:
+  - "{{ write_dq_results() }}"
+
 models:
   cdc_gold:
     +materialized: table
