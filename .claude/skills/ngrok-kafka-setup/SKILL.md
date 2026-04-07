@@ -21,7 +21,13 @@ Sets up a fresh ngrok TCP tunnel exposing local Kafka (port 9093) to Databricks,
 2. Start a new `ngrok tcp 9093` tunnel
 3. Poll the ngrok local API (`http://localhost:4040`) for the public URL
 4. Update `.env` → `KAFKA_EXTERNAL_HOST` and `KAFKA_EXTERNAL_PORT`
-5. Re-deploy `dvdrental-bronze` via `scripts/deploy_job.py --kafka-bootstrap <host:port>`
+5. Push secrets to Databricks scope `dvdrental` via `scripts/push_secrets_to_databricks.py`
+   — keys written: `kafka-external-host`, `kafka-external-port`
+6. Redeploy all jobs via `scripts/deploy_job.py` (no `--kafka-bootstrap` flag needed)
+
+The Bronze notebook reads `kafka-external-host` and `kafka-external-port` directly from
+the `dvdrental` secret scope at runtime. The `KAFKA_BOOTSTRAP` widget is available as a
+manual override only.
 
 ## Prerequisites
 
@@ -41,10 +47,7 @@ bash .claude/skills/ngrok-kafka-setup/scripts/setup_ngrok_kafka.sh
 After the script completes, trigger an orchestrator run to test end-to-end:
 
 ```bash
-set -a && source .env && set +a
-python3 scripts/deploy_job.py \
-  --kafka-bootstrap "${KAFKA_EXTERNAL_HOST}:${KAFKA_EXTERNAL_PORT}" \
-  --run
+set -a && source .env && set +a && python3 scripts/deploy_job.py --run
 ```
 
 ## Troubleshooting

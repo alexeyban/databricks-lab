@@ -8,13 +8,14 @@ Deploy dvdrental pipeline as 5 separate Databricks jobs:
   4. dvdrental-orchestrator — chains jobs 1→2→3 via run_job_task
   5. dvdrental-dq-gdpr     — daily VACUUM, erasure processing, SLA checks
 
+Kafka bootstrap is read by the Bronze notebook from Databricks secrets
+(scope: dvdrental, keys: kafka-external-host / kafka-external-port).
+Push updated secrets before deploying:
+    python3 scripts/push_secrets_to_databricks.py
+
 Usage:
     set -a && source .env && set +a
-    python3 scripts/deploy_job.py [--kafka-bootstrap HOST:PORT] [--checkpoint-suffix SUFFIX] [--run]
-
-Examples:
-    python3 scripts/deploy_job.py --kafka-bootstrap 6.tcp.eu.ngrok.io:16223
-    python3 scripts/deploy_job.py --kafka-bootstrap 6.tcp.eu.ngrok.io:16223 --run
+    python3 scripts/deploy_job.py [--checkpoint-suffix SUFFIX] [--run]
 """
 
 import argparse
@@ -112,12 +113,14 @@ def _base_settings(name: str, tasks: list[Task]) -> JobSettings:
 
 # ── job builders ─────────────────────────────────────────────────────────────
 
-def build_bronze_job(kafka_bootstrap: str, checkpoint_root: str) -> JobSettings:
+def build_bronze_job(checkpoint_root: str) -> JobSettings:
     tasks = [_task(
         key="Ingest_to_Bronze",
         notebook_path="notebooks/bronze/NB_ingest_to_bronze",
         params={
-            "KAFKA_BOOTSTRAP": kafka_bootstrap,
+            # KAFKA_BOOTSTRAP intentionally omitted — notebook reads from
+            # dvdrental secrets (kafka-external-host / kafka-external-port).
+            # Pass KAFKA_BOOTSTRAP as a widget override only for manual testing.
             "TOPIC_PATTERN": "cdc.public.*",
             "CATALOG": CATALOG,
             "BRONZE_SCHEMA": "bronze",
@@ -262,8 +265,6 @@ def build_orchestrator_job(bronze_id: int, silver_id: int,
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--kafka-bootstrap", default="",
-                        help="Kafka bootstrap servers (e.g. 6.tcp.eu.ngrok.io:16223)")
     parser.add_argument("--checkpoint-suffix", default="",
                         help="Suffix for checkpoint paths to force a fresh start (e.g. 'v3')")
     parser.add_argument("--run", action="store_true",
@@ -284,7 +285,7 @@ def main() -> None:
     print("Deploying dvdrental pipeline jobs...")
 
     bronze_id  = _upsert_job(w, "dvdrental-bronze",
-                             build_bronze_job(args.kafka_bootstrap, checkpoint_root))
+                             build_bronze_job(checkpoint_root))
     silver_id  = _upsert_job(w, "dvdrental-silver",
                              build_silver_job(checkpoint_root))
     vault_id   = _upsert_job(w, "dvdrental-vault",

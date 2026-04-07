@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# setup_ngrok_kafka.sh — Start ngrok TCP tunnel for Kafka and update .env + Databricks job
+# setup_ngrok_kafka.sh — Start ngrok TCP tunnel for Kafka, push to Databricks secrets,
+#                        and redeploy all pipeline jobs.
 #
 # Usage: bash .claude/skills/ngrok-kafka-setup/scripts/setup_ngrok_kafka.sh
 #
 # Requirements:
 #   - ngrok installed and authenticated (ngrok config check-update)
 #   - .env file with DATABRICKS_HOST, DATABRICKS_TOKEN
-#   - Python 3 + databricks-sdk (pip install databricks-sdk)
+#   - Python 3 + databricks-sdk (pip install -r requirements.txt)
 #   - Docker Kafka running on localhost:9093 (external listener)
 
 set -euo pipefail
@@ -58,7 +59,7 @@ KAFKA_PORT="${TUNNEL_URL##*:}"
 echo "      Tunnel: ${TUNNEL_URL}  (host=${KAFKA_HOST}, port=${KAFKA_PORT})"
 
 # ── 4. Update .env ────────────────────────────────────────────────────────────
-echo "[4/5] Updating ${ENV_FILE}..."
+echo "[4/5] Updating ${ENV_FILE} and pushing to Databricks secrets..."
 
 if grep -q "^KAFKA_EXTERNAL_HOST=" "${ENV_FILE}"; then
   sed -i "s|^KAFKA_EXTERNAL_HOST=.*|KAFKA_EXTERNAL_HOST=${KAFKA_HOST}|" "${ENV_FILE}"
@@ -72,21 +73,22 @@ else
   echo "KAFKA_EXTERNAL_PORT=${KAFKA_PORT}" >> "${ENV_FILE}"
 fi
 
-echo "      KAFKA_EXTERNAL_HOST=${KAFKA_HOST}"
-echo "      KAFKA_EXTERNAL_PORT=${KAFKA_PORT}"
-
-# ── 5. Re-deploy dvdrental-bronze with new bootstrap ─────────────────────────
-echo "[5/5] Re-deploying dvdrental-bronze Databricks job..."
+# Load updated .env into environment so SDK can authenticate
 set -a && source "${ENV_FILE}" && set +a
 
-python3 scripts/deploy_job.py --kafka-bootstrap "${KAFKA_HOST}:${KAFKA_PORT}"
+# Push KAFKA_EXTERNAL_HOST + KAFKA_EXTERNAL_PORT (and any other keys) to
+# Databricks secret scope 'dvdrental'. The Bronze notebook reads these directly.
+python3 scripts/push_secrets_to_databricks.py
+
+# ── 5. Redeploy all jobs (Bronze no longer needs --kafka-bootstrap flag) ─────
+echo "[5/5] Redeploying Databricks pipeline jobs..."
+python3 scripts/deploy_job.py
 
 echo ""
 echo "=== Done ==="
 echo "  Kafka bootstrap : ${KAFKA_HOST}:${KAFKA_PORT}"
+echo "  Secrets scope   : dvdrental  (kafka-external-host / kafka-external-port)"
 echo "  ngrok log       : /tmp/ngrok-kafka.log"
-echo "  .env updated    : ${ENV_FILE}"
 echo ""
-echo "Run the orchestrator to test end-to-end:"
-echo "  set -a && source .env && set +a"
-echo "  python3 scripts/deploy_job.py --kafka-bootstrap ${KAFKA_HOST}:${KAFKA_PORT} --run"
+echo "Run the orchestrator for an end-to-end test:"
+echo "  set -a && source .env && set +a && python3 scripts/deploy_job.py --run"
