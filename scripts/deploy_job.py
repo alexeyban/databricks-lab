@@ -22,6 +22,7 @@ import argparse
 import os
 
 from databricks.sdk import WorkspaceClient
+from databricks.sdk.service.compute import ClusterSpec
 from databricks.sdk.service.jobs import (
     CronSchedule,
     GitProvider,
@@ -37,6 +38,10 @@ from databricks.sdk.service.jobs import (
     TaskDependency,
     TaskEmailNotifications,
 )
+
+# Bronze classic cluster defaults (Serverless cannot reach ngrok TCP tunnels)
+BRONZE_SPARK_VERSION = "15.4.x-photon-scala2.12"
+BRONZE_NODE_TYPE     = "m5.large"
 
 GIT_URL = "https://github.com/alexeyban/databricks-lab"
 GIT_BRANCH = "main"
@@ -65,11 +70,13 @@ def _nb(path: str, params: dict | None = None) -> NotebookTask:
 
 
 def _task(key: str, notebook_path: str, params: dict | None = None,
-          depends_on: list[str] | None = None) -> Task:
+          depends_on: list[str] | None = None,
+          new_cluster: ClusterSpec | None = None) -> Task:
     return Task(
         task_key=key,
         notebook_task=_nb(notebook_path, params),
         depends_on=[TaskDependency(task_key=k) for k in (depends_on or [])],
+        new_cluster=new_cluster,
         timeout_seconds=0,
         email_notifications=TaskEmailNotifications(),
     )
@@ -113,7 +120,20 @@ def _base_settings(name: str, tasks: list[Task]) -> JobSettings:
 
 # ── job builders ─────────────────────────────────────────────────────────────
 
-def build_bronze_job(checkpoint_root: str) -> JobSettings:
+def build_bronze_job(checkpoint_root: str,
+                     node_type: str = BRONZE_NODE_TYPE,
+                     spark_version: str = BRONZE_SPARK_VERSION) -> JobSettings:
+    # Classic compute required: Serverless cannot make outbound TCP connections
+    # to ngrok tunnels, causing Kafka listTopics to time out.
+    bronze_cluster = ClusterSpec(
+        spark_version=spark_version,
+        node_type_id=node_type,
+        num_workers=1,
+        spark_conf={
+            # Give the stream 60 s to flush and stop cleanly on failure
+            "spark.sql.streaming.stopTimeout": "60000",
+        },
+    )
     tasks = [_task(
         key="Ingest_to_Bronze",
         notebook_path="notebooks/bronze/NB_ingest_to_bronze",
@@ -127,6 +147,7 @@ def build_bronze_job(checkpoint_root: str) -> JobSettings:
             "CHECKPOINT_PATH": f"{checkpoint_root}/bronze_cdc",
             "CHECKPOINT_ROOT": checkpoint_root,
         },
+        new_cluster=bronze_cluster,
     )]
     return _base_settings("dvdrental-bronze", tasks)
 
@@ -267,6 +288,10 @@ def main() -> None:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--checkpoint-suffix", default="",
                         help="Suffix for checkpoint paths to force a fresh start (e.g. 'v3')")
+    parser.add_argument("--node-type", default=BRONZE_NODE_TYPE,
+                        help=f"Node type for Bronze classic cluster (default: {BRONZE_NODE_TYPE})")
+    parser.add_argument("--spark-version", default=BRONZE_SPARK_VERSION,
+                        help=f"DBR version for Bronze cluster (default: {BRONZE_SPARK_VERSION})")
     parser.add_argument("--run", action="store_true",
                         help="Trigger the orchestrator immediately after deploying")
     parser.add_argument("--webhook-url", default="",
@@ -285,7 +310,7 @@ def main() -> None:
     print("Deploying dvdrental pipeline jobs...")
 
     bronze_id  = _upsert_job(w, "dvdrental-bronze",
-                             build_bronze_job(checkpoint_root))
+                             build_bronze_job(checkpoint_root, args.node_type, args.spark_version))
     silver_id  = _upsert_job(w, "dvdrental-silver",
                              build_silver_job(checkpoint_root))
     vault_id   = _upsert_job(w, "dvdrental-vault",
