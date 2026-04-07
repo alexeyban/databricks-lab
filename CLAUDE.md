@@ -178,3 +178,17 @@ For full generator docs see `README.md § DV 2.0 Generator`.
 ## Agent System
 
 The `/Agents/` directory contains 24 markdown files defining specialized agent personalities. The `/skills/` directory contains 24 reusable skill definitions. The `/runtime/` directory contains the Python agent loop (`autonomous_agent.py`) that generates code via LLM, uploads it to Databricks, runs it, and retries on failures. See `AGENT_PROMPT_EXAMPLES.md` for prompt templates.
+
+## DQ + GDPR Roadmap
+
+Full 4-phase implementation plan: `design/dq_gdpr/IMPLEMENTATION_PLAN.md`
+
+Two parallel workstreams sharing a common monitoring foundation:
+- **Data Quality:** Bronze quarantine, Silver/Vault/Gold assertions → `monitoring.dq_results`, dashboards, Slack alerts
+- **GDPR crypto-shredding:** per-subject AES-256-GCM DEKs via key vault, Gold `erasure_registry` suppression, `NB_process_erasure` 6-step erasure pipeline, SLA monitoring
+
+**Key architectural decisions:**
+- Silver encryption in `NB_process_to_silver_generic.ipynb` only, driven by `pipeline_configs/pii/pii_config.json`
+- Vault satellites store ciphertext as-is (crypto-shred works uniformly)
+- New `dvdrental-dq-gdpr` job in `scripts/deploy_job.py` for VACUUM, erasure processing, SLA checks
+- Dev key store: Databricks secret scopes (non-production; production = Azure Key Vault / AWS KMS)
