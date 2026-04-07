@@ -1,3 +1,13 @@
+# After filling in values, deploy jobs and upload vault config:
+#   set -a && source .env && set +a
+#   python3 scripts/deploy_job.py --kafka-bootstrap <host:port>
+#   python3 scripts/upload_vault_config.py
+
+# Path to the dvdrental SQL dump (plain SQL, not pg_restore format).
+# Download from https://www.postgresqltutorial.com/postgresql-getting-started/load-postgresql-sample-database/
+# Default: ./docker/dvdrental.sql (place the file there)
+DVDRENTAL_SQL_PATH=./docker/dvdrental.sql
+
 DATABRICKS_HOST=https://dbc-XXXXXXXXXXXXX.cloud.databricks.com
 DATABRICKS_TOKEN=dapiXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 DATABRICKS_WAREHOUSE_ID=

@@ -5,10 +5,11 @@ This repository can be reused as a starter for a CDC-to-Databricks lakehouse pro
 ## What You Can Reuse
 
 - Local CDC stack with PostgreSQL, Kafka, Debezium, Schema Registry, and Kafka UI
-- Databricks Bronze and Silver notebook patterns
-- dbt Gold layer structure
+- Metadata-driven Bronze and Silver notebook patterns (all tables, one generic notebook)
+- DV 2.0 generator meta-tool — generates vault notebooks from Silver configs automatically
 - Schema drift detection helpers
-- Smoke-test automation with ngrok-aware Kafka bootstrap handling
+- 4-job Databricks architecture (Bronze / Silver / Vault / Orchestrator) via `deploy_job.py`
+- dbt Gold layer structure
 
 ## Recommended Adaptation Path
 
@@ -16,110 +17,121 @@ This repository can be reused as a starter for a CDC-to-Databricks lakehouse pro
 
 Update:
 
-- [init-db.sql](/home/legion/PycharmProjects/gitlab/databricks-lab/init-db.sql)
-- [migrate_schema.sql](/home/legion/PycharmProjects/gitlab/databricks-lab/migrate_schema.sql)
-- [postgres-connector.json](/home/legion/PycharmProjects/gitlab/databricks-lab/postgres-connector.json)
-- [generators/load_generator.py](/home/legion/PycharmProjects/gitlab/databricks-lab/generators/load_generator.py)
-- [generators/load_products_generator.py](/home/legion/PycharmProjects/gitlab/databricks-lab/generators/load_products_generator.py)
-
-Replace the sample `orders` and `products` logic with your domain tables and change-event patterns.
+- `docker/init-dvdrental.sh` or your own DB init script
+- `postgres-connector.json` — topic prefix and table filter
+- `generators/load_generator.py` — replace dvdrental mutation logic with your domain tables
 
 ### 2. Adapt Bronze ingestion
 
-Use [NB_ingest_to_bronze.ipynb](/home/legion/PycharmProjects/gitlab/databricks-lab/notebooks/bronze/NB_ingest_to_bronze.ipynb) as the ingestion template.
-
-Change:
-
-- topic pattern
-- expected source contracts
-- monitoring schema and checkpoint paths
-- table routing logic if your topic naming differs
+`notebooks/bronze/NB_ingest_to_bronze.ipynb` works for any Kafka topic pattern — usually
+no changes needed beyond widget defaults (topic pattern, catalog, checkpoint path).
 
 ### 3. Adapt Silver processing
 
-Use:
+The generic Silver framework requires only one thing per table: a JSON config file.
 
-- [NB_process_to_silver.ipynb](/home/legion/PycharmProjects/gitlab/databricks-lab/notebooks/silver/NB_process_to_silver.ipynb)
-- [NB_process_products_silver.ipynb](/home/legion/PycharmProjects/gitlab/databricks-lab/notebooks/silver/NB_process_products_silver.ipynb)
+For each source table, add a file at `pipeline_configs/silver/<source>/<table_id>.json`:
 
-as merge-pattern references.
+```json
+{
+  "table_id": "orders",
+  "bronze_table": "orders",
+  "silver_table": "silver_orders",
+  "cdc_contract_key": "cdc.public.orders",
+  "silver_contract_key": "silver.orders",
+  "checkpoint_name": "orders_silver_generic",
+  "primary_keys": ["order_id"],
+  "dedupe_order_columns": ["updated_at", "event_ts_ms", "bronze_offset"],
+  "merge_core_fields": ["order_id", "customer_id", "total", "status", "updated_at"],
+  "field_mappings": [
+    {"target": "order_id", "source_paths": ["after.order_id", "before.order_id"]},
+    {"target": "total", "transform": "decimal_from_debezium_bytes",
+     "source_paths": ["after.total", "before.total"], "precision": 12, "scale": 2}
+  ]
+}
+```
 
-Replace:
+Add corresponding schema contracts for your tables to `notebooks/helpers/NB_schema_contracts.ipynb`.
 
-- Debezium payload schema
-- business keys
-- deduplication logic
-- merge clauses
-- table-specific transformations
+The generic notebook `notebooks/silver/NB_process_to_silver_generic.ipynb` handles all
+tables without modification.
 
-### 4. Update schema contracts and drift rules
+### 4. Generate the Vault layer
 
-Modify:
+Run the DV 2.0 generator against your Silver configs:
 
-- [NB_schema_contracts.ipynb](/home/legion/PycharmProjects/gitlab/databricks-lab/notebooks/helpers/NB_schema_contracts.ipynb)
-- [NB_schema_drift_helpers.ipynb](/home/legion/PycharmProjects/gitlab/databricks-lab/notebooks/helpers/NB_schema_drift_helpers.ipynb)
+```bash
+python -m generators.dv_generator.main --analyze \
+  --config-dir pipeline_configs/silver/<your-source> --no-ai
+```
 
-Define contracts for your own Bronze, Silver, and Gold tables before treating the pipeline as production-ready.
+Review the output in `generated/dv_sessions/<id>/05_review_notebook.ipynb`, then apply:
 
-### 5. Replace Gold models
+```bash
+python -m generators.dv_generator.main --resume <session_id> --from-step step6_validator
+```
 
-Update the dbt project in [cdc_gold](/home/legion/PycharmProjects/gitlab/databricks-lab/cdc_gold) so Gold reflects your business entities, metrics, and tests.
+This writes `pipeline_configs/datavault/dv_model.json` and generates all vault notebooks.
+
+Upload the model to your Unity Catalog Volume:
+
+```bash
+python3 scripts/upload_vault_config.py
+```
+
+### 5. Update schema contracts and drift rules
+
+Modify `notebooks/helpers/NB_schema_contracts.ipynb` to add schema definitions for your
+Bronze CDC envelopes and Silver tables before treating the pipeline as production-ready.
+
+### 6. Replace Gold models
+
+Update the dbt project in `cdc_gold/` so Gold reflects your business entities, metrics, and tests.
 
 Focus on:
 
-- sources
-- models
-- schema tests
-- referential integrity tests
+- `sources.yml` — point to your Silver/Vault tables
+- models — replace `gold_film` / `gold_rental` with your domain models
+- schema tests — add referential integrity + not-null tests
 
-### 6. Configure Databricks execution
+### 7. Configure Databricks jobs
 
-Review:
+Edit constants at the top of `scripts/deploy_job.py`:
 
-- [Orders-ingest-job.yaml](/home/legion/PycharmProjects/gitlab/databricks-lab/Orders-ingest-job.yaml)
-- [skills/docker-databricks-lab-ops/scripts/smoke_test_notebooks.py](/home/legion/PycharmProjects/gitlab/databricks-lab/skills/docker-databricks-lab-ops/scripts/smoke_test_notebooks.py)
+```python
+GIT_URL    = "https://github.com/<your-org>/<your-repo>"
+GIT_BRANCH = "main"
+CATALOG    = "your_catalog"
+```
 
-Replace:
+Update `SILVER_TABLES` to your table list, then deploy:
 
-- notebook paths
-- catalog/schema names
-- checkpoint paths
-- job ids
-- repository URL and branch
+```bash
+set -a && source .env && set +a
+python3 scripts/deploy_job.py --kafka-bootstrap <host:port>
+```
 
 ## Secret Handling
 
-Do not commit real credentials.
+Do not commit real credentials. Use `.envexample` as the template:
 
-Use:
+```bash
+cp .envexample .env
+# fill in DATABRICKS_HOST, DATABRICKS_TOKEN, and any other vars
+```
 
-- [\.envexample](/home/legion/PycharmProjects/gitlab/databricks-lab/.envexample) as the template
-- local `.env` for real values
-
-Keep real values only in local environment variables, secret stores, or CI/CD secret managers.
+Keep real values only in local environment variables, Databricks Secret Scopes, or
+CI/CD secret managers. See `design/plan_push_secrets_to_databricks.md` for a script
+that syncs `.env` → Databricks Secret Scope.
 
 ## Suggested Bootstrapping Flow
 
 1. Copy this repository.
 2. Replace the source schema and generators with your domain tables.
-3. Update Bronze and Silver notebook logic for your CDC payloads.
-4. Update schema contracts and drift policy.
-5. Replace Gold dbt models.
-6. Configure Databricks jobs and smoke test inputs.
-7. Run the smoke test end-to-end before using the repo as a project baseline.
-
-## Fast Validation
-
-For a quick end-to-end validation after adapting the project, run:
-
-```bash
-python3 skills/docker-databricks-lab-ops/scripts/smoke_test_notebooks.py
-```
-
-That gives you one command to verify:
-
-- Docker stack health
-- ngrok-aware Kafka exposure
-- source mutation generation
-- Databricks notebook execution
-- final terminal success or failure
+3. Add per-table Silver configs to `pipeline_configs/silver/<source>/`.
+4. Update schema contracts.
+5. Run the DV 2.0 generator to produce vault notebooks.
+6. Replace Gold dbt models.
+7. Update `deploy_job.py` constants and deploy all 4 jobs.
+8. Upload `dv_model.json` to the Volume with `upload_vault_config.py`.
+9. Trigger a full pipeline run and validate row counts at each layer.

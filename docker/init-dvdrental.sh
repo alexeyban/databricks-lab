@@ -3,13 +3,11 @@ set -e
 
 echo "=== Setting up dvdrental database ==="
 
-# Download dvdrental backup
-echo "Downloading dvdrental.zip..."
-apt-get install -y wget unzip 2>/dev/null || true
-wget -q -O /tmp/dvdrental.zip "https://www.postgresqltutorial.com/wp-content/uploads/2019/05/dvdrental.zip"
-unzip -o /tmp/dvdrental.zip -d /tmp/
+# Restore dvdrental from pre-downloaded SQL dump (mounted at /tmp/dvdrental.sql)
+# Strip lines not supported by PG15 (e.g. transaction_timeout from PG16+ dumps)
 echo "Restoring dvdrental into database '${POSTGRES_DB}'..."
-pg_restore -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" /tmp/dvdrental.tar
+grep -v "transaction_timeout" /tmp/dvdrental.sql \
+  | psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" --set ON_ERROR_STOP=off -q
 echo "dvdrental restored successfully"
 
 # Set up logical replication publication and slot

@@ -47,13 +47,10 @@ PostgreSQL dvdrental (WAL)
 | Layer | Table | Merge / hash key |
 |-------|-------|-----------------|
 | Bronze | `workspace.bronze.*` (15 tables) | — |
-| Silver | `workspace.silver.silver_film` | film_id |
-| Silver | `workspace.silver.silver_rental` | rental_id |
-| Silver | `workspace.silver.silver_payment` | payment_id |
-| Silver | `workspace.silver.silver_*` (12 ref tables) | entity PK |
+| Silver | `workspace.silver.silver_*` (15 tables) | entity PK |
 | Vault | `workspace.vault.hub_*` (13 hubs) | SHA-256 hash key |
-| Vault | `workspace.vault.lnk_*` (17 links) | composite hash key |
-| Vault | `workspace.vault.sat_*` (14 satellites) | hub hash key + load_date |
+| Vault | `workspace.vault.lnk_*` (19 links) | composite hash key |
+| Vault | `workspace.vault.sat_*` (15 satellites) | hub hash key + load_date |
 | Vault | `workspace.vault.pit_*` (4 PIT tables) | hub hash key + snapshot_date |
 | Vault | `workspace.vault.brg_*` (2 bridge tables) | — |
 | Gold | `workspace.gold.gold_film` | film_id |
@@ -81,7 +78,9 @@ curl http://localhost:8083/connectors/postgres-connector/status
 open http://localhost:8085
 ```
 
-PostgreSQL initialises from `docker/init-dvdrental.sh` on first start — this downloads and restores the full dvdrental dataset (~1000 films, ~16k rentals, ~14k payments) and creates the logical replication publication.
+PostgreSQL initialises from `docker/init-dvdrental.sh` on first start — restores the full
+dvdrental dataset (~1000 films, ~16k rentals, ~14k payments) and creates the logical
+replication publication.
 
 ### 2. Python Setup
 
@@ -92,7 +91,37 @@ pip install -r requirements.txt
 cp .envexample .env
 ```
 
-### 3. Generate CDC Traffic
+### 3. Upload Vault Config
+
+The vault notebooks read `dv_model.json` from a Unity Catalog Volume. Upload it once:
+
+```bash
+set -a && source .env && set +a
+python3 scripts/upload_vault_config.py
+```
+
+### 4. Deploy Databricks Jobs
+
+```bash
+set -a && source .env && set +a
+
+# Deploy all 4 jobs (Bronze / Silver / Vault / Orchestrator)
+python3 scripts/deploy_job.py --kafka-bootstrap <ngrok-host:port>
+
+# Deploy and immediately trigger the full pipeline
+python3 scripts/deploy_job.py --kafka-bootstrap <ngrok-host:port> --run
+```
+
+This creates/updates four Databricks jobs:
+
+| Job | What it does |
+|-----|-------------|
+| `dvdrental-bronze` | Kafka → 15 Bronze Delta tables (streaming) |
+| `dvdrental-silver` | 15 parallel Bronze → Silver tasks (generic notebook) |
+| `dvdrental-vault` | Hubs → Links + Satellites (parallel) → Business Vault |
+| `dvdrental-orchestrator` | Chains the three jobs above in sequence |
+
+### 5. Generate CDC Traffic
 
 ```bash
 # Film updates (rental_rate, rental_duration, replacement_cost)
@@ -105,25 +134,7 @@ python3 generators/load_generator.py
 # DB env vars: PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD
 ```
 
-### 4. Databricks Pipeline
-
-Run the Bronze notebook first, then Silver notebooks in parallel, then Vault notebooks:
-
-```bash
-# One-command full migration + E2E test (discovers ngrok, resets tables,
-# runs generators, triggers the Databricks job, and polls to completion)
-python3 skills/docker-databricks-lab-ops/scripts/migrate_and_run.py
-```
-
-Or trigger the job manually:
-
-```bash
-python3 skills/docker-databricks-lab-ops/scripts/run_databricks_notebook.py \
-  --job-id 574281734474239 \
-  --notebook-param KAFKA_BOOTSTRAP=<ngrok-host:port>
-```
-
-### 5. dbt Gold Layer
+### 6. dbt Gold Layer
 
 ```bash
 cd cdc_gold
@@ -137,18 +148,19 @@ dbt test           # data quality tests only
 ```
 docker-compose.yml              Local CDC stack definition
 postgres-connector.json         Debezium PostgreSQL connector config
-Orders-ingest-job.yaml          Databricks job definition (Bronze → Silver)
-docker/init-dvdrental.sh        PostgreSQL init: download + restore dvdrental, create publication
+docker/init-dvdrental.sh        PostgreSQL init: restore dvdrental, create publication
 
 generators/
   load_generator.py             Rental inserts, returns, payment inserts
   load_products_generator.py    Film attribute updates
+  dv_generator/                 DV 2.0 meta-tool (analyze → review → apply)
 
 notebooks/
   bronze/NB_ingest_to_bronze.ipynb              Kafka → Bronze Delta (topic pattern cdc.public.*)
-  silver/NB_process_to_silver.ipynb             Bronze rental → silver.silver_rental
-  silver/NB_process_products_silver.ipynb       Bronze film → silver.silver_film
-  silver/NB_process_payment_silver.ipynb        Bronze payment → silver.silver_payment
+  silver/NB_process_to_silver_generic.ipynb     Metadata-driven Bronze → Silver (all 15 tables)
+  silver/NB_process_to_silver.ipynb             Legacy: rental-specific MERGE (kept for reference)
+  silver/NB_process_products_silver.ipynb       Legacy: film-specific MERGE (kept for reference)
+  silver/NB_process_payment_silver.ipynb        Legacy: payment-specific MERGE (kept for reference)
   vault/NB_dv_metadata.ipynb                    DV 2.0 config parser + hash key / DDL helpers
   vault/NB_ingest_to_hubs.ipynb                 Silver → 13 Hub tables (SHA-256 insert-only)
   vault/NB_ingest_to_links.ipynb                Silver → 19 Link tables (insert-only)
@@ -157,15 +169,19 @@ notebooks/
   helpers/NB_catalog_helpers.ipynb              Table/schema creation utilities
   helpers/NB_schema_drift_helpers.ipynb         Schema drift detection + alerting
   helpers/NB_schema_contracts.ipynb             Expected schema definitions (Bronze/Silver/Gold)
+  helpers/NB_silver_metadata.ipynb              Silver metadata loader (pipeline_configs/*.json)
   helpers/NB_reset_tables.ipynb                 Drop all tables + clear checkpoints
 
-cdc_gold/                       dbt project for Gold models
-skills/docker-databricks-lab-ops/scripts/
-  migrate_and_run.py            Full migration + E2E test script
-  smoke_test_notebooks.py       Smoke test: Docker + connector + generators + job trigger
-  reset_databricks_tables.py    Trigger NB_reset_tables on Databricks
-  run_databricks_notebook.py    Submit/trigger a Databricks job or notebook run
-  prepare_ngrok_kafka.py        Discover or start ngrok TCP tunnel for Kafka
+pipeline_configs/
+  silver/dvdrental/*.json         15 Silver table configs (field mappings, PKs, transforms)
+  datavault/dv_model.json         Approved DV 2.0 model (13 hubs, 19 links, 15 sats, 4 PITs, 2 bridges)
+
+scripts/
+  deploy_job.py                   Create/update all 4 Databricks jobs; optionally trigger run
+  upload_vault_config.py          Upload dv_model.json to Unity Catalog Volume (run once)
+  smoke_test_vault.py             Validate vault row counts via SQL execution API
+
+cdc_gold/                         dbt project for Gold models
 ```
 
 ## Notebooks
@@ -175,40 +191,49 @@ skills/docker-databricks-lab-ops/scripts/
 Structured streaming from Kafka → Bronze Delta tables.
 
 - Topic pattern: `cdc.public.*` (dynamically names target table from topic)
-- Parameters: `KAFKA_BOOTSTRAP`, `TOPIC_PATTERN` (default `cdc.public.*`), `CATALOG`, `BRONZE_SCHEMA`, `CHECKPOINT_PATH`
-- Output: `workspace.bronze.{film, rental, payment}`
-- Schema: `topic`, `partition`, `offset`, `kafka_timestamp`, `message_key`, `value`, `source_schema`, `table_name`, `ingested_at`
+- Parameters: `KAFKA_BOOTSTRAP`, `TOPIC_PATTERN`, `CATALOG`, `BRONZE_SCHEMA`, `CHECKPOINT_PATH`
+- Output: one `workspace.bronze.<table>` per source table
 
-### Silver — per-table MERGE notebooks
+### Silver — NB_process_to_silver_generic
 
-Each notebook reads a Bronze table, parses the Debezium envelope, and upserts into Silver.
+Single metadata-driven notebook that handles all 15 tables. Each Silver task in the
+Databricks job calls this notebook with a different `TABLE_ID`.
 
-| Notebook | Source | Target | Merge key |
-|----------|--------|--------|-----------|
-| NB_process_products_silver | bronze.film | silver.silver_film | film_id |
-| NB_process_to_silver | bronze.rental | silver.silver_rental | rental_id |
-| NB_process_payment_silver | bronze.payment | silver.silver_payment | payment_id |
+Parameters: `TABLE_ID`, `CATALOG`, `BRONZE_SCHEMA`, `SILVER_SCHEMA`, `CHECKPOINT_ROOT`,
+`MONITORING_SCHEMA`, `SCHEMA_POLICY`, `ALERT_CHANNEL`, `WEBHOOK_URL`, `RUN_BOOTSTRAP_HOOKS`
+
+Per-table config is loaded from `pipeline_configs/silver/dvdrental/<TABLE_ID>.json` and
+defines: Bronze/Silver table names, CDC + Silver schema contracts, primary keys, dedupe
+ordering, field mappings, and optional transforms.
+
+**Transforms supported:**
+
+| Transform | Use case |
+|-----------|---------|
+| `plain` | Direct column copy (coalesce after/before) |
+| `epoch_micros_to_timestamp` | Debezium microsecond timestamps → Spark timestamp |
+| `decimal_from_debezium_bytes` | Debezium Base64-encoded NUMERIC bytes → decimal |
+| `decimal_from_json_paths` | Variable-scale NUMERIC from JSON structure |
 
 Features:
-- Schema evolution via `.option("mergeSchema", "true")` — new columns are auto-added
-- Dynamic MERGE rebuilt from current table schema at runtime
-- Debezium `NUMERIC` decoding: `cast(conv(hex(unbase64(value)), 16, 10) as double) / pow(10, scale)`
-- All schema changes logged to `workspace.monitoring.schema_drift_log`
+- Schema drift detection + alerting per `SCHEMA_POLICY`
+- Graceful skip when Bronze table doesn't exist yet
+- Deduplication within each micro-batch via `row_number()` window
+- MERGE keyed by `primary_keys` from the table config
 
 ### Vault — NB_dv_metadata
 
-Loads `pipeline_configs/datavault/dv_model.json` and exposes shared helpers:
+Loads `dv_model.json` from a Unity Catalog Volume and exposes shared helpers:
 
-- `load_dv_config()` — returns parsed DVModel config dict
-- `hub_hash_expr(bk_col)` — SHA-256 hash key: `sha2(concat_ws("||", upper(trim(col.cast("string")))), 256)`
-- `diff_hash_expr(tracked_cols)` — DIFF_HK for satellite change detection (NULL-safe)
-- DDL helpers: `ensure_hub_schema`, `ensure_link_schema`, `ensure_sat_schema`
+- `load_model(path)` — reads the DV 2.0 config JSON; accepts absolute Volume paths or relative (resolved under `/Volumes/workspace/default/mnt/`)
+- `generate_hash_key(bk_cols)` — SHA-256 hash key expression
+- `generate_diff_hash(tracked_cols)` — NULL-safe DIFF_HK for satellite change detection
+- DDL helpers: `create_hub_table`, `create_link_table`, `create_sat_table`, `create_pit_table`, `create_bridge_table`
 
 ### Vault — NB_ingest_to_hubs
 
-Insert-only MERGE from Silver → 13 Hub tables. Watermarked by `LOAD_DATE` to avoid reprocessing.
+Insert-only MERGE from Silver → 13 Hub tables. Watermarked by `LOAD_DATE`.
 
-- Source config: `pipeline_configs/datavault/dv_model.json`
 - Pattern: `MERGE INTO vault.hub_X USING source ON HK_X = HK_X WHEN NOT MATCHED THEN INSERT`
 
 ### Vault — NB_ingest_to_links
@@ -220,24 +245,25 @@ Insert-only MERGE from Silver → 19 Link tables. Runs after Hubs are populated.
 
 ### Vault — NB_ingest_to_satellites
 
-Append-only insert from Silver → 15 Satellite tables. Uses DIFF_HK change detection to avoid duplicate rows.
+Append-only insert from Silver → 15 Satellite tables using DIFF_HK change detection.
 
 - `LEFT JOIN` latest DIFF_HK per hub key; insert only where DIFF_HK changed or is new
-- No end-dating — history preserved by LOAD_DATE
+- History preserved by `LOAD_DATE` — no end-dating
 
 ### Vault — NB_dv_business_vault
 
-Builds PIT (Point-in-Time) tables and Bridge tables from vault layer data.
+Builds PIT (Point-in-Time) and Bridge tables from the vault layer.
 
 - **PIT tables** (4): daily snapshot spine for HUB_FILM, HUB_RENTAL, HUB_CUSTOMER, HUB_PAYMENT
-- **Bridge tables** (2): BRG_RENTAL_FILM (rental → inventory → film path), BRG_FILM_CAST (film → actor)
+- **Bridge tables** (2): BRG_RENTAL_FILM (rental → inventory → film), BRG_FILM_CAST (film → actor)
 
 ### Helpers
 
-- **NB_catalog_helpers**: `ensure_schema_exists`, `create_silver_table_*`, `build_merge_clauses`, `execute_merge`
+- **NB_catalog_helpers**: `ensure_schema_exists`, `build_merge_clauses`, `execute_merge`
 - **NB_schema_drift_helpers**: `validate_schema_with_policy`, `SchemaDriftException`, webhook/email/log alerting
-- **NB_schema_contracts**: expected Bronze/Silver/Gold schemas for drift detection
-- **NB_reset_tables**: drops all Bronze/Silver/Gold/monitoring tables + clears checkpoints. Parameters: `CATALOG`, `DRY_RUN`
+- **NB_schema_contracts**: expected Bronze/Silver schemas for all 15 tables
+- **NB_silver_metadata**: `get_silver_table_config(table_id)` — loads per-table config from `pipeline_configs/silver/dvdrental/`
+- **NB_reset_tables**: drops all Bronze/Silver/Gold/monitoring tables + clears checkpoints
 
 ## Schema Evolution
 
@@ -263,21 +289,6 @@ Configurable per-layer policy with alerting.
 
 `log` · `webhook` (Slack/Teams) · `email` (SMTP) · `all`
 
-### Notebook Parameters
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `SCHEMA_POLICY` | `additive_only` | Validation policy |
-| `ALERT_CHANNEL` | `log` | Alert delivery method |
-| `WEBHOOK_URL` | (empty) | Slack/Teams webhook URL |
-
-Example — enable Slack alerts:
-
-```python
-dbutils.widgets.set("ALERT_CHANNEL", "webhook")
-dbutils.widgets.set("WEBHOOK_URL", "https://hooks.slack.com/services/XXX/YYY/ZZZ")
-```
-
 ### Monitoring Query
 
 ```sql
@@ -286,56 +297,65 @@ ORDER BY detected_at DESC
 LIMIT 10;
 ```
 
-## Databricks Job
+## Databricks Jobs
 
-`Orders-ingest-job.yaml` defines the **dvdrental ingest job** (ID: `574281734474239`):
+Defined and deployed via `scripts/deploy_job.py`. Four jobs, each independently runnable:
 
-- **Schedule**: every 5 minutes (`56 4/5 * * * ?`, Europe/Belgrade)
-- **Ingest_to_Bronze**: reads from Kafka, writes all 15 `bronze.*` tables
-- **ingest_*_To_Silver** — all 15 Silver tasks run in parallel after Bronze succeeds
-- **NB_ingest_to_hubs** ┐
-- **NB_ingest_to_links** ├ Vault tasks run in sequence after Silver
-- **NB_ingest_to_satellites** ┘
-- **NB_dv_business_vault** — PIT + Bridge after satellites complete
-- **Git source**: `https://github.com/alexeyban/databricks-lab` branch `main`
+### dvdrental-bronze
 
-Update the job via API after changing the YAML:
+Kafka → Bronze Delta streaming. Requires Kafka to be reachable (local dev: use ngrok).
+
+**Parameters:** `KAFKA_BOOTSTRAP`, `TOPIC_PATTERN`, `CATALOG`, `BRONZE_SCHEMA`, `CHECKPOINT_PATH`
+
+### dvdrental-silver
+
+15 parallel tasks, each calling `NB_process_to_silver_generic` with a different `TABLE_ID`.
+Gracefully skips tables whose Bronze Delta does not yet exist.
+
+**Parameters (per task):** `TABLE_ID`, `CATALOG`, `BRONZE_SCHEMA`, `SILVER_SCHEMA`,
+`CHECKPOINT_ROOT`, `MONITORING_SCHEMA`, `SCHEMA_POLICY`
+
+### dvdrental-vault
+
+Sequential DAG: Hubs → (Links ‖ Satellites) → Business Vault.
+
+**Parameters (all tasks):** `CATALOG`, `VAULT_SCHEMA`, `MODEL_PATH`
+
+`MODEL_PATH` defaults to `/Volumes/workspace/default/mnt/pipeline_configs/datavault/dv_model.json`.
+Upload the model file with `scripts/upload_vault_config.py` before the first run.
+
+### dvdrental-orchestrator
+
+Chains the three jobs above: Bronze → Silver → Vault. No git source — uses `run_job_task`.
+
+### Deploy / redeploy
 
 ```bash
-python3 skills/docker-databricks-lab-ops/scripts/migrate_and_run.py \
-  --skip-legacy-drop --skip-reset --skip-docker \
-  --kafka-bootstrap <host:port>
+set -a && source .env && set +a
+
+# Deploy only (or update existing jobs)
+python3 scripts/deploy_job.py --kafka-bootstrap <host:port>
+
+# Deploy + force fresh checkpoints + run immediately
+python3 scripts/deploy_job.py --kafka-bootstrap <host:port> --checkpoint-suffix v4 --run
 ```
 
 ## ngrok for Local Development
 
-Databricks cannot reach a local Kafka directly. Expose it via ngrok:
+Databricks Serverless cannot reach a local Kafka directly. Expose it via ngrok:
 
 ```bash
-python3 skills/docker-databricks-lab-ops/scripts/prepare_ngrok_kafka.py
-```
-
-Then start Compose with the discovered public endpoint:
-
-```bash
-export KAFKA_EXTERNAL_HOST=<ngrok-host>
-export KAFKA_EXTERNAL_PORT=<ngrok-port>
+ngrok tcp 9093
+# → e.g. 6.tcp.eu.ngrok.io:16223
+export KAFKA_EXTERNAL_HOST=6.tcp.eu.ngrok.io
+export KAFKA_EXTERNAL_PORT=16223
 docker compose up -d
 ```
 
-Pass `KAFKA_BOOTSTRAP=<ngrok-host>:<ngrok-port>` when triggering the job. Do not commit ngrok values — they change on every restart.
-
-## Full E2E Smoke Test
-
-```bash
-python3 skills/docker-databricks-lab-ops/scripts/smoke_test_notebooks.py \
-  --job-id 574281734474239 \
-  --film-iterations 6 \
-  --rental-iterations 12 \
-  --reset                  # drop all tables + checkpoints before running
-```
-
-Or use `migrate_and_run.py` which also handles legacy table drops and job definition updates.
+Pass the ngrok address as `--kafka-bootstrap` when deploying. Note: Databricks Serverless
+has outbound network restrictions that may block ngrok endpoints depending on workspace
+configuration. If Bronze fails with a Kafka timeout, run Silver and Vault independently
+(Bronze Delta tables from a previous run persist in Unity Catalog).
 
 ## Secret Hygiene
 
@@ -375,15 +395,10 @@ python -m generators.dv_generator.main --analyze \
 python -m generators.dv_generator.main --resume <session_id> \
   --from-step step6_validator
 
-# With AI semantic classifier (requires LLM_API_KEY + DATABRICKS_WAREHOUSE_ID):
+# With AI semantic classifier (requires LLM env vars):
 python -m generators.dv_generator.main --analyze \
   --config-dir pipeline_configs/silver/dvdrental
 ```
-
-### Session output
-
-All intermediate files land in `generated/dv_sessions/YYYYMMDD_HHMMSS/`.
-Sessions are resumable from any step with `--resume <id> --from-step <step>`.
 
 ### Key files
 

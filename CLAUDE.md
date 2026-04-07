@@ -30,7 +30,9 @@ curl http://localhost:8083/connectors/postgres-connector/status
 open http://localhost:8085
 ```
 
-The PostgreSQL service runs the `docker/init-dvdrental.sh` script on first start, which downloads and restores the full dvdrental dataset (~1000 films, ~16k rentals, ~14k payments) and creates the logical replication publication.
+The PostgreSQL service runs `docker/init-dvdrental.sh` on first start, which restores the full
+dvdrental dataset (~1000 films, ~16k rentals, ~14k payments) via a pre-mounted SQL dump and
+creates the logical replication publication.
 
 ## Python Setup
 
@@ -80,35 +82,60 @@ PostgreSQL dvdrental (WAL)
 ### Notebooks
 
 - **`notebooks/bronze/NB_ingest_to_bronze.ipynb`**: Structured streaming from Kafka → Bronze Delta tables (topic pattern `cdc.public.*`, dynamic table naming)
-- **`notebooks/silver/NB_process_to_silver.ipynb`**: Debezium MERGE into `silver.silver_rental` (merge key: `rental_id`)
-- **`notebooks/silver/NB_process_products_silver.ipynb`**: Debezium MERGE into `silver.silver_film` (merge key: `film_id`)
-- **`notebooks/silver/NB_process_payment_silver.ipynb`**: Debezium MERGE into `silver.silver_payment` (merge key: `payment_id`)
-- **`notebooks/vault/NB_dv_metadata.ipynb`**: DV 2.0 config loader + SHA-256 hash key / DIFF_HASH / DDL helpers
+- **`notebooks/silver/NB_process_to_silver_generic.ipynb`**: Metadata-driven Bronze → Silver for all 15 tables. Reads per-table config from `pipeline_configs/silver/dvdrental/<TABLE_ID>.json`. Handles schema validation, Debezium transforms, deduplication, and MERGE.
+- **`notebooks/silver/NB_process_to_silver.ipynb`**: Legacy rental-specific MERGE (kept for reference)
+- **`notebooks/silver/NB_process_products_silver.ipynb`**: Legacy film-specific MERGE (kept for reference)
+- **`notebooks/silver/NB_process_payment_silver.ipynb`**: Legacy payment-specific MERGE (kept for reference)
+- **`notebooks/vault/NB_dv_metadata.ipynb`**: DV 2.0 config loader + SHA-256 hash key / DIFF_HASH / DDL helpers. Reads `dv_model.json` from a Unity Catalog Volume.
 - **`notebooks/vault/NB_ingest_to_hubs.ipynb`**: Silver → 13 Hubs (insert-only MERGE, watermarked)
 - **`notebooks/vault/NB_ingest_to_links.ipynb`**: Silver → 19 Links (insert-only MERGE, depends on Hubs)
 - **`notebooks/vault/NB_ingest_to_satellites.ipynb`**: Silver → 15 Satellites (append-only via DIFF_HK change detection)
 - **`notebooks/vault/NB_dv_business_vault.ipynb`**: 4 PIT tables (daily snapshot spine) + 2 Bridge tables
 - **`notebooks/helpers/NB_schema_drift_helpers.ipynb`**: Schema drift detection with configurable policies (`strict`, `additive_only`, `permissive`) and alerting (Slack, Teams, email)
-- **`notebooks/helpers/NB_catalog_helpers.ipynb`**: Table/schema creation utilities (`create_silver_table_rental/film/payment`, `build_merge_clauses`, `execute_merge`)
-- **`notebooks/helpers/NB_schema_contracts.ipynb`**: Expected schema definitions for all Bronze/Silver/Gold layers
+- **`notebooks/helpers/NB_catalog_helpers.ipynb`**: Table/schema creation utilities (`build_merge_clauses`, `execute_merge`, `get_existing_columns`)
+- **`notebooks/helpers/NB_schema_contracts.ipynb`**: Expected schema definitions for all 15 Bronze CDC envelopes and 15 Silver tables
+- **`notebooks/helpers/NB_silver_metadata.ipynb`**: `get_silver_table_config(table_id)` — loads per-table config from `pipeline_configs/silver/dvdrental/`
 
 ### Databricks Tables
 
 | Layer | Table | Key |
 |-------|-------|-----|
 | Bronze | workspace.bronze.* (15 tables) | — |
-| Silver | workspace.silver.silver_film | film_id |
-| Silver | workspace.silver.silver_rental | rental_id |
-| Silver | workspace.silver.silver_payment | payment_id |
-| Silver | workspace.silver.silver_* (12 ref tables) | entity PK |
+| Silver | workspace.silver.silver_* (15 tables) | entity PK |
 | Vault | workspace.vault.hub_* (13 hubs) | SHA-256 HK |
-| Vault | workspace.vault.lnk_* (17 links) | composite HK |
-| Vault | workspace.vault.sat_* (14 satellites) | HK + LOAD_DATE |
+| Vault | workspace.vault.lnk_* (19 links) | composite HK |
+| Vault | workspace.vault.sat_* (15 satellites) | HK + LOAD_DATE |
 | Vault | workspace.vault.pit_* (4 PITs) | HK + snapshot_date |
 | Vault | workspace.vault.brg_* (2 bridges) | — |
 | Gold | workspace.gold.gold_film | film_id |
 | Gold | workspace.gold.gold_rental | rental_id |
 | Monitoring | workspace.monitoring.schema_drift_log | — |
+
+### Orchestration
+
+Four independent Databricks jobs managed by `scripts/deploy_job.py`:
+
+| Job | Tasks | Git source |
+|-----|-------|-----------|
+| `dvdrental-bronze` | 1 task: Kafka → Bronze streaming | Yes |
+| `dvdrental-silver` | 15 parallel tasks: Bronze → Silver generic | Yes |
+| `dvdrental-vault` | 4 tasks: Hubs → Links‖Sats → Business Vault | Yes |
+| `dvdrental-orchestrator` | 3 run_job_task: chains the above in sequence | No |
+
+Deploy/redeploy all jobs:
+```bash
+set -a && source .env && set +a
+python3 scripts/deploy_job.py --kafka-bootstrap <host:port>
+```
+
+### Vault Config Upload
+
+Before the first vault run, upload `dv_model.json` to the Unity Catalog Volume:
+```bash
+python3 scripts/upload_vault_config.py
+```
+The notebooks read it from `/Volumes/workspace/default/mnt/pipeline_configs/datavault/dv_model.json`.
+Re-run whenever `pipeline_configs/datavault/dv_model.json` changes.
 
 ### Schema Evolution (Silver Layer)
 
@@ -120,10 +147,6 @@ PostgreSQL `NUMERIC` columns (`rental_rate`, `replacement_cost`, `amount`) are e
 ```python
 expr("cast(conv(hex(unbase64(raw_value)), 16, 10) as double) / pow(10, scale)")
 ```
-
-### Orchestration
-
-`Orders-ingest-job.yaml` defines the Databricks workflow: Bronze ingest runs first, then all 15 Silver tasks run in parallel after it succeeds, then Vault notebooks run in sequence (Hubs → Links + Satellites in parallel → Business Vault).
 
 ### DV 2.0 Design
 
