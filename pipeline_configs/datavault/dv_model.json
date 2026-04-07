@@ -13,7 +13,8 @@
       "confidence": "HIGH",
       "rules_fired": [
         "R4"
-      ]
+      ],
+      "description": "Hub table for actors (DVD rental performers). Business key: actor_id. Source: cdc.dvdrental.actor."
     },
     {
       "name": "HUB_ADDRESS",
@@ -28,7 +29,8 @@
       "confidence": "HIGH",
       "rules_fired": [
         "R4"
-      ]
+      ],
+      "description": "Hub table for physical addresses (stores, customers, staff). Business key: address_id. Source: cdc.dvdrental.address."
     },
     {
       "name": "HUB_CATEGORY",
@@ -43,7 +45,8 @@
       "confidence": "HIGH",
       "rules_fired": [
         "R4"
-      ]
+      ],
+      "description": "Hub table for film categories / genres. Business key: category_id. Source: cdc.dvdrental.category."
     },
     {
       "name": "HUB_CITY",
@@ -58,7 +61,8 @@
       "confidence": "HIGH",
       "rules_fired": [
         "R4"
-      ]
+      ],
+      "description": "Hub table for cities referenced by addresses. Business key: city_id. Source: cdc.dvdrental.city."
     },
     {
       "name": "HUB_COUNTRY",
@@ -73,7 +77,8 @@
       "confidence": "HIGH",
       "rules_fired": [
         "R4"
-      ]
+      ],
+      "description": "Hub table for countries referenced by cities. Business key: country_id. Source: cdc.dvdrental.country."
     },
     {
       "name": "HUB_CUSTOMER",
@@ -88,7 +93,8 @@
       "confidence": "HIGH",
       "rules_fired": [
         "R1"
-      ]
+      ],
+      "description": "Hub table for rental customers. Business key: customer_id. Source: cdc.dvdrental.customer."
     },
     {
       "name": "HUB_FILM",
@@ -103,7 +109,8 @@
       "confidence": "HIGH",
       "rules_fired": [
         "R1"
-      ]
+      ],
+      "description": "Hub table for films in the rental catalogue. Business key: film_id. Source: cdc.dvdrental.film."
     },
     {
       "name": "HUB_INVENTORY",
@@ -118,7 +125,8 @@
       "confidence": "HIGH",
       "rules_fired": [
         "R1"
-      ]
+      ],
+      "description": "Hub table for physical film copies per store. Business key: inventory_id. Source: cdc.dvdrental.inventory."
     },
     {
       "name": "HUB_LANGUAGE",
@@ -133,7 +141,8 @@
       "confidence": "HIGH",
       "rules_fired": [
         "R4"
-      ]
+      ],
+      "description": "Hub table for film languages. Business key: language_id. Source: cdc.dvdrental.language."
     },
     {
       "name": "HUB_PAYMENT",
@@ -148,7 +157,8 @@
       "confidence": "HIGH",
       "rules_fired": [
         "R1"
-      ]
+      ],
+      "description": "Hub table for payments made by customers. Business key: payment_id. Source: cdc.dvdrental.payment."
     },
     {
       "name": "HUB_RENTAL",
@@ -163,7 +173,8 @@
       "confidence": "HIGH",
       "rules_fired": [
         "R1"
-      ]
+      ],
+      "description": "Hub table for rental transactions. Business key: rental_id. Source: cdc.dvdrental.rental."
     },
     {
       "name": "HUB_STAFF",
@@ -178,7 +189,8 @@
       "confidence": "HIGH",
       "rules_fired": [
         "R4"
-      ]
+      ],
+      "description": "Hub table for store staff members. Business key: staff_id. Source: cdc.dvdrental.staff."
     },
     {
       "name": "HUB_STORE",
@@ -193,7 +205,8 @@
       "confidence": "HIGH",
       "rules_fired": [
         "R4"
-      ]
+      ],
+      "description": "Hub table for rental store locations. Business key: store_id. Source: cdc.dvdrental.store."
     }
   ],
   "links": [
@@ -217,7 +230,12 @@
       "confidence": "HIGH",
       "rules_fired": [
         "L1"
-      ]
+      ],
+      "description": "Link table connecting HUB_ADDRESS \u2194 HUB_CITY. Relationship keys: address_id, city_id. Source: silver.silver_address. Classification confidence: HIGH.",
+      "hub_ref_descriptions": {
+        "HUB_ADDRESS": "Foreign hash key reference to HUB_ADDRESS (derived from address_id)",
+        "HUB_CITY": "Foreign hash key reference to HUB_CITY (derived from city_id)"
+      }
     },
     {
       "name": "LNK_CITY_COUNTRY",
@@ -239,7 +257,12 @@
       "confidence": "HIGH",
       "rules_fired": [
         "L1"
-      ]
+      ],
+      "description": "Link table connecting HUB_CITY \u2194 HUB_COUNTRY. Relationship keys: city_id, country_id. Source: silver.silver_city. Classification confidence: HIGH.",
+      "hub_ref_descriptions": {
+        "HUB_CITY": "Foreign hash key reference to HUB_CITY (derived from city_id)",
+        "HUB_COUNTRY": "Foreign hash key reference to HUB_COUNTRY (derived from country_id)"
+      }
     },
     {
       "name": "LNK_CUSTOMER_STORE",
@@ -261,7 +284,12 @@
       "confidence": "HIGH",
       "rules_fired": [
         "L1"
-      ]
+      ],
+      "description": "Link table connecting HUB_CUSTOMER \u2194 HUB_STORE. Relationship keys: customer_id, store_id. Source: silver.silver_customer. Classification confidence: HIGH.",
+      "hub_ref_descriptions": {
+        "HUB_CUSTOMER": "Foreign hash key reference to HUB_CUSTOMER (derived from customer_id)",
+        "HUB_STORE": "Foreign hash key reference to HUB_STORE (derived from store_id)"
+      }
     },
     {
       "name": "LNK_CUSTOMER_ADDRESS",
@@ -283,7 +311,12 @@
       "confidence": "HIGH",
       "rules_fired": [
         "L1"
-      ]
+      ],
+      "description": "Link table connecting HUB_CUSTOMER \u2194 HUB_ADDRESS. Relationship keys: customer_id, address_id. Source: silver.silver_customer. Classification confidence: HIGH.",
+      "hub_ref_descriptions": {
+        "HUB_CUSTOMER": "Foreign hash key reference to HUB_CUSTOMER (derived from customer_id)",
+        "HUB_ADDRESS": "Foreign hash key reference to HUB_ADDRESS (derived from address_id)"
+      }
     },
     {
       "name": "LNK_FILM_LANGUAGE",
@@ -305,7 +338,12 @@
       "confidence": "HIGH",
       "rules_fired": [
         "L1"
-      ]
+      ],
+      "description": "Link table connecting HUB_FILM \u2194 HUB_LANGUAGE. Relationship keys: film_id, language_id. Source: silver.silver_film. Classification confidence: HIGH.",
+      "hub_ref_descriptions": {
+        "HUB_FILM": "Foreign hash key reference to HUB_FILM (derived from film_id)",
+        "HUB_LANGUAGE": "Foreign hash key reference to HUB_LANGUAGE (derived from language_id)"
+      }
     },
     {
       "name": "LNK_FILM_ACTOR",
@@ -327,7 +365,12 @@
       "confidence": "HIGH",
       "rules_fired": [
         "L2"
-      ]
+      ],
+      "description": "Link table connecting HUB_FILM \u2194 HUB_ACTOR. Relationship keys: film_id, actor_id. Source: silver.silver_film_actor. Classification confidence: HIGH.",
+      "hub_ref_descriptions": {
+        "HUB_FILM": "Foreign hash key reference to HUB_FILM (derived from film_id)",
+        "HUB_ACTOR": "Foreign hash key reference to HUB_ACTOR (derived from actor_id)"
+      }
     },
     {
       "name": "LNK_FILM_CATEGORY",
@@ -349,7 +392,12 @@
       "confidence": "HIGH",
       "rules_fired": [
         "L2"
-      ]
+      ],
+      "description": "Link table connecting HUB_FILM \u2194 HUB_CATEGORY. Relationship keys: film_id, category_id. Source: silver.silver_film_category. Classification confidence: HIGH.",
+      "hub_ref_descriptions": {
+        "HUB_FILM": "Foreign hash key reference to HUB_FILM (derived from film_id)",
+        "HUB_CATEGORY": "Foreign hash key reference to HUB_CATEGORY (derived from category_id)"
+      }
     },
     {
       "name": "LNK_INVENTORY_FILM",
@@ -371,7 +419,12 @@
       "confidence": "HIGH",
       "rules_fired": [
         "L1"
-      ]
+      ],
+      "description": "Link table connecting HUB_INVENTORY \u2194 HUB_FILM. Relationship keys: inventory_id, film_id. Source: silver.silver_inventory. Classification confidence: HIGH.",
+      "hub_ref_descriptions": {
+        "HUB_INVENTORY": "Foreign hash key reference to HUB_INVENTORY (derived from inventory_id)",
+        "HUB_FILM": "Foreign hash key reference to HUB_FILM (derived from film_id)"
+      }
     },
     {
       "name": "LNK_INVENTORY_STORE",
@@ -393,7 +446,12 @@
       "confidence": "HIGH",
       "rules_fired": [
         "L1"
-      ]
+      ],
+      "description": "Link table connecting HUB_INVENTORY \u2194 HUB_STORE. Relationship keys: inventory_id, store_id. Source: silver.silver_inventory. Classification confidence: HIGH.",
+      "hub_ref_descriptions": {
+        "HUB_INVENTORY": "Foreign hash key reference to HUB_INVENTORY (derived from inventory_id)",
+        "HUB_STORE": "Foreign hash key reference to HUB_STORE (derived from store_id)"
+      }
     },
     {
       "name": "LNK_PAYMENT_CUSTOMER",
@@ -415,7 +473,12 @@
       "confidence": "HIGH",
       "rules_fired": [
         "L1"
-      ]
+      ],
+      "description": "Link table connecting HUB_PAYMENT \u2194 HUB_CUSTOMER. Relationship keys: payment_id, customer_id. Source: silver.silver_payment. Classification confidence: HIGH.",
+      "hub_ref_descriptions": {
+        "HUB_PAYMENT": "Foreign hash key reference to HUB_PAYMENT (derived from payment_id)",
+        "HUB_CUSTOMER": "Foreign hash key reference to HUB_CUSTOMER (derived from customer_id)"
+      }
     },
     {
       "name": "LNK_PAYMENT_STAFF",
@@ -437,7 +500,12 @@
       "confidence": "HIGH",
       "rules_fired": [
         "L1"
-      ]
+      ],
+      "description": "Link table connecting HUB_PAYMENT \u2194 HUB_STAFF. Relationship keys: payment_id, staff_id. Source: silver.silver_payment. Classification confidence: HIGH.",
+      "hub_ref_descriptions": {
+        "HUB_PAYMENT": "Foreign hash key reference to HUB_PAYMENT (derived from payment_id)",
+        "HUB_STAFF": "Foreign hash key reference to HUB_STAFF (derived from staff_id)"
+      }
     },
     {
       "name": "LNK_PAYMENT_RENTAL",
@@ -459,7 +527,12 @@
       "confidence": "HIGH",
       "rules_fired": [
         "L1"
-      ]
+      ],
+      "description": "Link table connecting HUB_PAYMENT \u2194 HUB_RENTAL. Relationship keys: payment_id, rental_id. Source: silver.silver_payment. Classification confidence: HIGH.",
+      "hub_ref_descriptions": {
+        "HUB_PAYMENT": "Foreign hash key reference to HUB_PAYMENT (derived from payment_id)",
+        "HUB_RENTAL": "Foreign hash key reference to HUB_RENTAL (derived from rental_id)"
+      }
     },
     {
       "name": "LNK_RENTAL_INVENTORY",
@@ -481,7 +554,12 @@
       "confidence": "HIGH",
       "rules_fired": [
         "L1"
-      ]
+      ],
+      "description": "Link table connecting HUB_RENTAL \u2194 HUB_INVENTORY. Relationship keys: rental_id, inventory_id. Source: silver.silver_rental. Classification confidence: HIGH.",
+      "hub_ref_descriptions": {
+        "HUB_RENTAL": "Foreign hash key reference to HUB_RENTAL (derived from rental_id)",
+        "HUB_INVENTORY": "Foreign hash key reference to HUB_INVENTORY (derived from inventory_id)"
+      }
     },
     {
       "name": "LNK_RENTAL_CUSTOMER",
@@ -503,7 +581,12 @@
       "confidence": "HIGH",
       "rules_fired": [
         "L1"
-      ]
+      ],
+      "description": "Link table connecting HUB_RENTAL \u2194 HUB_CUSTOMER. Relationship keys: rental_id, customer_id. Source: silver.silver_rental. Classification confidence: HIGH.",
+      "hub_ref_descriptions": {
+        "HUB_RENTAL": "Foreign hash key reference to HUB_RENTAL (derived from rental_id)",
+        "HUB_CUSTOMER": "Foreign hash key reference to HUB_CUSTOMER (derived from customer_id)"
+      }
     },
     {
       "name": "LNK_RENTAL_STAFF",
@@ -525,7 +608,12 @@
       "confidence": "HIGH",
       "rules_fired": [
         "L1"
-      ]
+      ],
+      "description": "Link table connecting HUB_RENTAL \u2194 HUB_STAFF. Relationship keys: rental_id, staff_id. Source: silver.silver_rental. Classification confidence: HIGH.",
+      "hub_ref_descriptions": {
+        "HUB_RENTAL": "Foreign hash key reference to HUB_RENTAL (derived from rental_id)",
+        "HUB_STAFF": "Foreign hash key reference to HUB_STAFF (derived from staff_id)"
+      }
     },
     {
       "name": "LNK_STAFF_ADDRESS",
@@ -547,7 +635,12 @@
       "confidence": "HIGH",
       "rules_fired": [
         "L1"
-      ]
+      ],
+      "description": "Link table connecting HUB_STAFF \u2194 HUB_ADDRESS. Relationship keys: staff_id, address_id. Source: silver.silver_staff. Classification confidence: HIGH.",
+      "hub_ref_descriptions": {
+        "HUB_STAFF": "Foreign hash key reference to HUB_STAFF (derived from staff_id)",
+        "HUB_ADDRESS": "Foreign hash key reference to HUB_ADDRESS (derived from address_id)"
+      }
     },
     {
       "name": "LNK_STAFF_STORE",
@@ -569,7 +662,12 @@
       "confidence": "HIGH",
       "rules_fired": [
         "L1"
-      ]
+      ],
+      "description": "Link table connecting HUB_STAFF \u2194 HUB_STORE. Relationship keys: staff_id, store_id. Source: silver.silver_staff. Classification confidence: HIGH.",
+      "hub_ref_descriptions": {
+        "HUB_STAFF": "Foreign hash key reference to HUB_STAFF (derived from staff_id)",
+        "HUB_STORE": "Foreign hash key reference to HUB_STORE (derived from store_id)"
+      }
     },
     {
       "name": "LNK_STORE_STAFF",
@@ -591,7 +689,12 @@
       "confidence": "HIGH",
       "rules_fired": [
         "L1"
-      ]
+      ],
+      "description": "Link table connecting HUB_STORE \u2194 HUB_STAFF. Relationship keys: store_id, manager_staff_id. Source: silver.silver_store. Classification confidence: HIGH.",
+      "hub_ref_descriptions": {
+        "HUB_STORE": "Foreign hash key reference to HUB_STORE (derived from store_id)",
+        "HUB_STAFF": "Foreign hash key reference to HUB_STAFF (derived from manager_staff_id)"
+      }
     },
     {
       "name": "LNK_STORE_ADDRESS",
@@ -613,7 +716,12 @@
       "confidence": "HIGH",
       "rules_fired": [
         "L1"
-      ]
+      ],
+      "description": "Link table connecting HUB_STORE \u2194 HUB_ADDRESS. Relationship keys: store_id, address_id. Source: silver.silver_store. Classification confidence: HIGH.",
+      "hub_ref_descriptions": {
+        "HUB_STORE": "Foreign hash key reference to HUB_STORE (derived from store_id)",
+        "HUB_ADDRESS": "Foreign hash key reference to HUB_ADDRESS (derived from address_id)"
+      }
     }
   ],
   "satellites": [
@@ -634,7 +742,12 @@
       "confidence": "HIGH",
       "rules_fired": [
         "S1"
-      ]
+      ],
+      "description": "Satellite for HUB_ACTOR tracking all descriptive payload columns. Tracked columns: first_name, last_name. Source: silver.silver_actor.",
+      "column_descriptions": {
+        "first_name": "Tracked attribute from silver_actor (varchar)",
+        "last_name": "Tracked attribute from silver_actor (varchar)"
+      }
     },
     {
       "name": "SAT_ADDRESS_CORE",
@@ -656,7 +769,15 @@
       "confidence": "HIGH",
       "rules_fired": [
         "S1"
-      ]
+      ],
+      "description": "Satellite for HUB_ADDRESS tracking all descriptive payload columns. Tracked columns: address, address2, district, postal_code, phone. Source: silver.silver_address.",
+      "column_descriptions": {
+        "address": "Tracked attribute from silver_address (varchar)",
+        "address2": "Tracked attribute from silver_address (varchar)",
+        "district": "Tracked attribute from silver_address (varchar)",
+        "postal_code": "Tracked attribute from silver_address (varchar)",
+        "phone": "Tracked attribute from silver_address (varchar)"
+      }
     },
     {
       "name": "SAT_CATEGORY_CORE",
@@ -674,7 +795,11 @@
       "confidence": "HIGH",
       "rules_fired": [
         "S1"
-      ]
+      ],
+      "description": "Satellite for HUB_CATEGORY tracking all descriptive payload columns. Tracked columns: name. Source: silver.silver_category.",
+      "column_descriptions": {
+        "name": "Tracked attribute from silver_category (varchar)"
+      }
     },
     {
       "name": "SAT_CITY_CORE",
@@ -692,7 +817,11 @@
       "confidence": "HIGH",
       "rules_fired": [
         "S1"
-      ]
+      ],
+      "description": "Satellite for HUB_CITY tracking all descriptive payload columns. Tracked columns: city. Source: silver.silver_city.",
+      "column_descriptions": {
+        "city": "Tracked attribute from silver_city (varchar)"
+      }
     },
     {
       "name": "SAT_COUNTRY_CORE",
@@ -710,7 +839,11 @@
       "confidence": "HIGH",
       "rules_fired": [
         "S1"
-      ]
+      ],
+      "description": "Satellite for HUB_COUNTRY tracking all descriptive payload columns. Tracked columns: country. Source: silver.silver_country.",
+      "column_descriptions": {
+        "country": "Tracked attribute from silver_country (varchar)"
+      }
     },
     {
       "name": "SAT_CUSTOMER_CORE",
@@ -732,7 +865,15 @@
       "confidence": "HIGH",
       "rules_fired": [
         "S1"
-      ]
+      ],
+      "description": "Satellite for HUB_CUSTOMER tracking all descriptive payload columns. Tracked columns: first_name, last_name, email, activebool, active. Source: silver.silver_customer.",
+      "column_descriptions": {
+        "first_name": "Tracked attribute from silver_customer (varchar)",
+        "last_name": "Tracked attribute from silver_customer (varchar)",
+        "email": "Tracked attribute from silver_customer (varchar)",
+        "activebool": "Tracked attribute from silver_customer (boolean)",
+        "active": "Tracked attribute from silver_customer (boolean)"
+      }
     },
     {
       "name": "SAT_FILM_CORE",
@@ -756,7 +897,17 @@
       "confidence": "HIGH",
       "rules_fired": [
         "S2"
-      ]
+      ],
+      "description": "Satellite for HUB_FILM tracking core descriptive attributes (split from pricing). Tracked columns: title, description, release_year, length, rating, special_features, fulltext. Source: silver.silver_film.",
+      "column_descriptions": {
+        "title": "Tracked attribute from silver_film (varchar)",
+        "description": "Tracked attribute from silver_film (varchar)",
+        "release_year": "Tracked attribute from silver_film (varchar)",
+        "length": "Tracked attribute from silver_film (varchar)",
+        "rating": "Tracked attribute from silver_film (timestamp)",
+        "special_features": "Tracked attribute from silver_film (timestamp)",
+        "fulltext": "Tracked attribute from silver_film (varchar)"
+      }
     },
     {
       "name": "SAT_FILM_PRICING",
@@ -776,7 +927,13 @@
       "confidence": "HIGH",
       "rules_fired": [
         "S2"
-      ]
+      ],
+      "description": "Satellite for HUB_FILM tracking pricing / financial attributes (split from core). Tracked columns: rental_duration, rental_rate, replacement_cost. Source: silver.silver_film.",
+      "column_descriptions": {
+        "rental_duration": "Tracked attribute from silver_film (timestamp)",
+        "rental_rate": "Tracked attribute from silver_film (numeric)",
+        "replacement_cost": "Tracked attribute from silver_film (numeric)"
+      }
     },
     {
       "name": "SAT_INVENTORY",
@@ -794,7 +951,11 @@
       "confidence": "HIGH",
       "rules_fired": [
         "S4"
-      ]
+      ],
+      "description": "Satellite for HUB_INVENTORY tracking audit marker (tracks existence and timestamps). Tracked columns: last_update. Source: silver.silver_inventory.",
+      "column_descriptions": {
+        "last_update": "Tracked attribute from silver_inventory (timestamp)"
+      }
     },
     {
       "name": "SAT_LANGUAGE_CORE",
@@ -812,7 +973,11 @@
       "confidence": "HIGH",
       "rules_fired": [
         "S1"
-      ]
+      ],
+      "description": "Satellite for HUB_LANGUAGE tracking all descriptive payload columns. Tracked columns: name. Source: silver.silver_language.",
+      "column_descriptions": {
+        "name": "Tracked attribute from silver_language (varchar)"
+      }
     },
     {
       "name": "SAT_PAYMENT_CORE",
@@ -830,7 +995,11 @@
       "confidence": "HIGH",
       "rules_fired": [
         "S2"
-      ]
+      ],
+      "description": "Satellite for HUB_PAYMENT tracking core descriptive attributes (split from pricing). Tracked columns: payment_date. Source: silver.silver_payment.",
+      "column_descriptions": {
+        "payment_date": "Tracked attribute from silver_payment (timestamp)"
+      }
     },
     {
       "name": "SAT_PAYMENT_PRICING",
@@ -848,7 +1017,11 @@
       "confidence": "HIGH",
       "rules_fired": [
         "S2"
-      ]
+      ],
+      "description": "Satellite for HUB_PAYMENT tracking pricing / financial attributes (split from core). Tracked columns: amount. Source: silver.silver_payment.",
+      "column_descriptions": {
+        "amount": "Tracked attribute from silver_payment (numeric)"
+      }
     },
     {
       "name": "SAT_RENTAL_CORE",
@@ -867,7 +1040,12 @@
       "confidence": "HIGH",
       "rules_fired": [
         "S1"
-      ]
+      ],
+      "description": "Satellite for HUB_RENTAL tracking all descriptive payload columns. Tracked columns: rental_date, return_date. Source: silver.silver_rental.",
+      "column_descriptions": {
+        "rental_date": "Tracked attribute from silver_rental (timestamp)",
+        "return_date": "Tracked attribute from silver_rental (timestamp)"
+      }
     },
     {
       "name": "SAT_STAFF_CORE",
@@ -889,7 +1067,15 @@
       "confidence": "HIGH",
       "rules_fired": [
         "S1"
-      ]
+      ],
+      "description": "Satellite for HUB_STAFF tracking all descriptive payload columns. Tracked columns: first_name, last_name, email, username, active. Source: silver.silver_staff.",
+      "column_descriptions": {
+        "first_name": "Tracked attribute from silver_staff (varchar)",
+        "last_name": "Tracked attribute from silver_staff (varchar)",
+        "email": "Tracked attribute from silver_staff (varchar)",
+        "username": "Tracked attribute from silver_staff (varchar)",
+        "active": "Tracked attribute from silver_staff (boolean)"
+      }
     },
     {
       "name": "SAT_STORE",
@@ -907,7 +1093,11 @@
       "confidence": "HIGH",
       "rules_fired": [
         "S4"
-      ]
+      ],
+      "description": "Satellite for HUB_STORE tracking audit marker (tracks existence and timestamps). Tracked columns: last_update. Source: silver.silver_store.",
+      "column_descriptions": {
+        "last_update": "Tracked attribute from silver_store (timestamp)"
+      }
     }
   ],
   "pit_tables": [
@@ -920,7 +1110,8 @@
         "SAT_FILM_PRICING"
       ],
       "snapshot_grain": "daily",
-      "enabled": true
+      "enabled": true,
+      "description": "Point-in-Time table for HUB_FILM. Provides aligned daily snapshots joining satellites: SAT_FILM_CORE, SAT_FILM_PRICING. Grain: daily per hub key."
     },
     {
       "name": "PIT_RENTAL",
@@ -930,7 +1121,8 @@
         "SAT_RENTAL_CORE"
       ],
       "snapshot_grain": "daily",
-      "enabled": true
+      "enabled": true,
+      "description": "Point-in-Time table for HUB_RENTAL. Provides aligned daily snapshots joining satellites: SAT_RENTAL_CORE. Grain: daily per hub key."
     },
     {
       "name": "PIT_CUSTOMER",
@@ -940,7 +1132,8 @@
         "SAT_CUSTOMER_CORE"
       ],
       "snapshot_grain": "daily",
-      "enabled": true
+      "enabled": true,
+      "description": "Point-in-Time table for HUB_CUSTOMER. Provides aligned daily snapshots joining satellites: SAT_CUSTOMER_CORE. Grain: daily per hub key."
     },
     {
       "name": "PIT_PAYMENT",
@@ -951,7 +1144,8 @@
         "SAT_PAYMENT_PRICING"
       ],
       "snapshot_grain": "daily",
-      "enabled": true
+      "enabled": true,
+      "description": "Point-in-Time table for HUB_PAYMENT. Provides aligned daily snapshots joining satellites: SAT_PAYMENT_CORE, SAT_PAYMENT_PRICING. Grain: daily per hub key."
     }
   ],
   "bridge_tables": [
@@ -965,7 +1159,8 @@
         "LNK_INVENTORY_FILM",
         "HUB_FILM"
       ],
-      "enabled": true
+      "enabled": true,
+      "description": "Bridge table traversing multi-hop relationships: HUB_RENTAL \u2192 LNK_RENTAL_INVENTORY \u2192 HUB_INVENTORY \u2192 LNK_INVENTORY_FILM \u2192 HUB_FILM. Enables direct joins across the path without intermediate lookups."
     },
     {
       "name": "BRG_FILM_CAST",
@@ -975,7 +1170,8 @@
         "LNK_FILM_ACTOR",
         "HUB_ACTOR"
       ],
-      "enabled": true
+      "enabled": true,
+      "description": "Bridge table traversing multi-hop relationships: HUB_FILM \u2192 LNK_FILM_ACTOR \u2192 HUB_ACTOR. Enables direct joins across the path without intermediate lookups."
     }
   ]
 }
