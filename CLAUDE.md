@@ -125,7 +125,8 @@ Four independent Databricks jobs managed by `scripts/deploy_job.py`:
 Deploy/redeploy all jobs:
 ```bash
 set -a && source .env && set +a
-python3 scripts/deploy_job.py --kafka-bootstrap <host:port>
+python3 scripts/push_secrets_to_databricks.py   # push kafka-external-host/port to 'dvdrental' scope
+python3 scripts/deploy_job.py
 ```
 
 ### Vault Config Upload

@@ -50,12 +50,6 @@ After the script completes, trigger an orchestrator run to test end-to-end:
 set -a && source .env && set +a && python3 scripts/deploy_job.py --run
 ```
 
-To override the Bronze cluster node type or runtime (defaults: `m5.large`, `15.4.x-photon-scala2.12`):
-
-```bash
-python3 scripts/deploy_job.py --node-type i3.xlarge --spark-version 16.4.x-photon-scala2.12 --run
-```
-
 ## Troubleshooting
 
 | Symptom | Fix |

@@ -1,7 +1,7 @@
 # After filling in values, push secrets to Databricks and deploy:
 #   set -a && source .env && set +a
-#   python3 scripts/push_secrets_to_databricks.py   # push to Secret Scope 'dvdrental'
-#   python3 scripts/deploy_job.py --kafka-bootstrap <host:port>
+#   python3 scripts/push_secrets_to_databricks.py   # push kafka-external-host/port to scope 'dvdrental'
+#   python3 scripts/deploy_job.py
 #   python3 scripts/upload_vault_config.py
 
 # Path to the dvdrental SQL dump (plain SQL, not pg_restore format).

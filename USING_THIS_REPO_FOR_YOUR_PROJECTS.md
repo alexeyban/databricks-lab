@@ -108,7 +108,8 @@ Update `SILVER_TABLES` to your table list, then deploy:
 
 ```bash
 set -a && source .env && set +a
-python3 scripts/deploy_job.py --kafka-bootstrap <host:port>
+python3 scripts/push_secrets_to_databricks.py   # push Kafka bootstrap to secret scope
+python3 scripts/deploy_job.py
 ```
 
 ## Secret Handling

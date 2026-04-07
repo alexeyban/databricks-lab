@@ -291,7 +291,7 @@ workspace/
 
 ---
 
-## Orchestration (Orders-ingest-job.yaml additions)
+## Orchestration (dvdrental-vault job via deploy_job.py)
 
 ```
 Bronze
@@ -308,7 +308,7 @@ Bronze
 
 - **New notebooks**: `notebooks/vault/NB_dv_metadata.ipynb`, `NB_ingest_to_hubs.ipynb`, `NB_ingest_to_links.ipynb`, `NB_ingest_to_satellites.ipynb`, `NB_dv_business_vault.ipynb`
 - **New config**: `pipeline_configs/datavault/dv_model.json`
-- **Extend**: `Orders-ingest-job.yaml` — add vault task group after silver tasks
+- **Extend**: `scripts/deploy_job.py` — vault job already included as `dvdrental-vault`
 - **Reuse**: `notebooks/helpers/NB_catalog_helpers.ipynb` patterns for DDL/MERGE helpers
 
 ---

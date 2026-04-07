@@ -123,12 +123,14 @@ python3 scripts/upload_vault_config.py   # uploads dv_model.json
 ```bash
 set -a && source .env && set +a
 
+# Push Kafka bootstrap to Databricks secret scope 'dvdrental' first
+python3 scripts/push_secrets_to_databricks.py
+
 # Deploy all 5 jobs (Bronze / Silver / Vault / Orchestrator / DQ-GDPR)
-python3 scripts/deploy_job.py --kafka-bootstrap <ngrok-host:port>
+python3 scripts/deploy_job.py
 
 # Deploy with Slack alerting + run immediately
-python3 scripts/deploy_job.py --kafka-bootstrap <ngrok-host:port> \
-  --webhook-url https://hooks.slack.com/... --run
+python3 scripts/deploy_job.py --webhook-url https://hooks.slack.com/... --run
 ```
 
 This creates/updates five Databricks jobs:
@@ -381,29 +383,31 @@ Daily maintenance job (02:00 UTC). Three independent tasks:
 set -a && source .env && set +a
 
 # Deploy only (or update existing jobs)
-python3 scripts/deploy_job.py --kafka-bootstrap <host:port>
+python3 scripts/deploy_job.py
 
 # Deploy with Slack webhook + fresh checkpoints + run immediately
-python3 scripts/deploy_job.py --kafka-bootstrap <host:port> \
-  --webhook-url https://hooks.slack.com/... --checkpoint-suffix v4 --run
+python3 scripts/deploy_job.py --webhook-url https://hooks.slack.com/... \
+  --checkpoint-suffix v4 --run
 ```
 
 ## ngrok for Local Development
 
-Databricks Serverless cannot reach a local Kafka directly. Expose it via ngrok:
+Databricks Serverless cannot reach a local Kafka directly. Use the built-in skill to
+set up an ngrok TCP tunnel and push the bootstrap address to Databricks secrets:
 
 ```bash
-ngrok tcp 9093
-# → e.g. 6.tcp.eu.ngrok.io:16223
-export KAFKA_EXTERNAL_HOST=6.tcp.eu.ngrok.io
-export KAFKA_EXTERNAL_PORT=16223
-docker compose up -d
+# Sets up ngrok tunnel, updates .env, pushes secrets, and redeploys Bronze job
+bash .claude/skills/ngrok-kafka-setup/scripts/setup_ngrok_kafka.sh
 ```
 
-Pass the ngrok address as `--kafka-bootstrap` when deploying. Note: Databricks Serverless
-has outbound network restrictions that may block ngrok endpoints depending on workspace
-configuration. If Bronze fails with a Kafka timeout, run Silver and Vault independently
-(Bronze Delta tables from a previous run persist in Unity Catalog).
+The Bronze notebook reads `kafka-external-host` and `kafka-external-port` from the
+`dvdrental` Databricks secret scope at runtime — no bootstrap address in job parameters.
+
+To push updated secrets manually:
+```bash
+set -a && source .env && set +a
+python3 scripts/push_secrets_to_databricks.py
+```
 
 ## Secret Hygiene
 

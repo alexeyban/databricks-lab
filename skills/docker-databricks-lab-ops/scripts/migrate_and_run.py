@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
 """
-migrate_and_run.py - Full migration from orders/products to dvdrental + E2E test.
+migrate_and_run.py - Legacy migration script (orders/products → dvdrental) + E2E test.
 
-Steps:
+NOTE: This script is kept for historical reference. The current pipeline is managed
+entirely by scripts/deploy_job.py which creates/updates all 5 dvdrental jobs
+(dvdrental-bronze, dvdrental-silver, dvdrental-vault, dvdrental-orchestrator,
+dvdrental-dq-gdpr). Orders-ingest-job.yaml no longer exists.
+
+Steps (original):
   1. Drop legacy tables (bronze.orders, bronze.products, silver.silver_orders,
      silver.silver_products, gold.total_products_order) via Databricks SQL API.
-  2. Update the 'dvdrental ingest job' from Orders-ingest-job.yaml via Jobs API
-     (creates it if not found).
+  2. Update the legacy 'dvdrental ingest job' via Jobs API (creates it if not found).
   3. Reset dvdrental tables and checkpoints via NB_reset_tables notebook.
   4. Start local Docker CDC stack, ensure ngrok tunnel, register Debezium
      connector, and run data generators.
-  5. Trigger the dvdrental ingest job and poll until completion.
+  5. Trigger the job and poll until completion.
 
 Requires DATABRICKS_HOST and DATABRICKS_TOKEN in the environment (or .env).
 """
