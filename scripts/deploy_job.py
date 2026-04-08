@@ -2,19 +2,18 @@
 """
 Deploy dvdrental pipeline as 5 separate Databricks jobs:
 
-  1. dvdrental-bronze      — Kafka → Bronze Delta (streaming)
+  1. dvdrental-bronze      — Auto Loader (cloudFiles) → Bronze Delta
   2. dvdrental-silver      — 15 parallel Bronze → Silver tasks
   3. dvdrental-vault       — Hubs → Links+Sats → Business Vault
   4. dvdrental-orchestrator — chains jobs 1→2→3 via run_job_task
   5. dvdrental-dq-gdpr     — daily VACUUM, erasure processing, SLA checks
 
-Kafka bootstrap is read by the Bronze notebook from Databricks secrets
-(scope: dvdrental, keys: kafka-external-host / kafka-external-port).
-Push updated secrets before deploying:
-    python3 scripts/push_secrets_to_databricks.py
+Bronze reads NDJSON files from a Unity Catalog Volume landing zone written
+by scripts/kafka_to_volume.py running locally (no ngrok TCP tunnel needed).
 
 Usage:
     set -a && source .env && set +a
+    python3 scripts/kafka_to_volume.py &   # start local consumer
     python3 scripts/deploy_job.py [--checkpoint-suffix SUFFIX] [--run]
 """
 
@@ -42,6 +41,7 @@ GIT_URL = "https://github.com/alexeyban/databricks-lab"
 GIT_BRANCH = "main"
 CATALOG = "workspace"
 CHECKPOINT_ROOT = "/Volumes/workspace/default/mnt/checkpoints"
+LANDING_ROOT    = "/Volumes/workspace/default/mnt/bronze-landing"
 MODEL_PATH = "/Volumes/workspace/default/mnt/pipeline_configs/datavault/dv_model.json"
 
 SILVER_TABLES = [
@@ -118,14 +118,12 @@ def build_bronze_job(checkpoint_root: str) -> JobSettings:
         key="Ingest_to_Bronze",
         notebook_path="notebooks/bronze/NB_ingest_to_bronze",
         params={
-            # KAFKA_BOOTSTRAP intentionally omitted — notebook reads from
-            # dvdrental secrets (kafka-external-host / kafka-external-port).
-            # Pass KAFKA_BOOTSTRAP as a widget override only for manual testing.
-            "TOPIC_PATTERN": "cdc.public.*",
-            "CATALOG": CATALOG,
-            "BRONZE_SCHEMA": "bronze",
+            "LANDING_PATH":    LANDING_ROOT,
+            "CATALOG":         CATALOG,
+            "BRONZE_SCHEMA":   "bronze",
             "CHECKPOINT_PATH": f"{checkpoint_root}/bronze_cdc",
             "CHECKPOINT_ROOT": checkpoint_root,
+            "SCHEMA_LOCATION": f"{checkpoint_root}/bronze_autoloader_schema",
         },
     )]
     return _base_settings("dvdrental-bronze", tasks)

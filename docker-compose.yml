@@ -81,3 +81,28 @@ services:
     environment:
       KAFKA_CLUSTERS_0_NAME: local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+
+  # Optional: local consumer that uploads CDC events to the Databricks Volume
+  # landing zone so the Bronze notebook can use Auto Loader instead of direct
+  # Kafka connectivity (no ngrok TCP tunnel required).
+  #
+  # Start with:
+  #   docker compose --profile kafka-to-volume up -d kafka-to-volume
+  kafka-to-volume:
+    image: python:3.11-slim
+    profiles:
+      - kafka-to-volume
+    depends_on:
+      - kafka
+      - connect
+    environment:
+      KAFKA_BOOTSTRAP: kafka:9092
+      DATABRICKS_HOST: ${DATABRICKS_HOST}
+      DATABRICKS_TOKEN: ${DATABRICKS_TOKEN}
+    volumes:
+      - ./scripts:/app/scripts:ro
+    working_dir: /app
+    command: >
+      bash -c "pip install --quiet confluent-kafka databricks-sdk &&
+               python scripts/kafka_to_volume.py --bootstrap kafka:9092"
+    restart: unless-stopped
