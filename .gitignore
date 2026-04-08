@@ -7,3 +7,4 @@ __pycache__/
 venv/
 logs/
 docs/
+scripts/dvdrental.sql

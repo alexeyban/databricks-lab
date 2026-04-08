@@ -44,7 +44,7 @@ services:
       POSTGRES_DB: demo
     volumes:
       - ./docker/init-dvdrental.sh:/docker-entrypoint-initdb.d/init.sh
-      - ${DVDRENTAL_SQL_PATH:-./docker/dvdrental.sql}:/tmp/dvdrental.sql
+      - ${DVDRENTAL_SQL_PATH:-./scripts/dvdrental.sql}:/tmp/dvdrental.sql
     command: >
       postgres
       -c wal_level=logical
