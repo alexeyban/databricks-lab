@@ -4,7 +4,7 @@
     "column": "email",
     "sensitivity": "pii_direct",
     "subject_id_col": "customer_id",
-    "encrypt": false,
+    "encrypt": true,
     "notes": "login identifier"
   },
   {
@@ -12,7 +12,7 @@
     "column": "first_name",
     "sensitivity": "pii_direct",
     "subject_id_col": "customer_id",
-    "encrypt": false,
+    "encrypt": true,
     "notes": "given name"
   },
   {
@@ -20,7 +20,7 @@
     "column": "last_name",
     "sensitivity": "pii_direct",
     "subject_id_col": "customer_id",
-    "encrypt": false,
+    "encrypt": true,
     "notes": "family name"
   },
   {
@@ -36,7 +36,7 @@
     "column": "email",
     "sensitivity": "pii_direct",
     "subject_id_col": "staff_id",
-    "encrypt": false,
+    "encrypt": true,
     "notes": "work email"
   },
   {
@@ -44,7 +44,7 @@
     "column": "first_name",
     "sensitivity": "pii_direct",
     "subject_id_col": "staff_id",
-    "encrypt": false,
+    "encrypt": true,
     "notes": "given name"
   },
   {
@@ -52,7 +52,7 @@
     "column": "last_name",
     "sensitivity": "pii_direct",
     "subject_id_col": "staff_id",
-    "encrypt": false,
+    "encrypt": true,
     "notes": "family name"
   },
   {
@@ -68,7 +68,7 @@
     "column": "picture",
     "sensitivity": "pii_direct",
     "subject_id_col": "staff_id",
-    "encrypt": false,
+    "encrypt": true,
     "notes": "biometric / profile image"
   },
   {
@@ -76,7 +76,7 @@
     "column": "address",
     "sensitivity": "pii_direct",
     "subject_id_col": "address_id",
-    "encrypt": false,
+    "encrypt": true,
     "notes": "street address line 1"
   },
   {
@@ -84,7 +84,7 @@
     "column": "address2",
     "sensitivity": "pii_direct",
     "subject_id_col": "address_id",
-    "encrypt": false,
+    "encrypt": true,
     "notes": "street address line 2"
   },
   {
@@ -92,7 +92,7 @@
     "column": "phone",
     "sensitivity": "pii_direct",
     "subject_id_col": "address_id",
-    "encrypt": false,
+    "encrypt": true,
     "notes": "contact phone number"
   },
   {
@@ -100,7 +100,7 @@
     "column": "postal_code",
     "sensitivity": "pii_direct",
     "subject_id_col": "address_id",
-    "encrypt": false,
+    "encrypt": true,
     "notes": "postal / zip code"
   },
   {
