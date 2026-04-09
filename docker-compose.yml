@@ -96,8 +96,7 @@ services:
       args:
         REQUIREMENTS_FILE: requirements-dbt.txt
         INSTALL_GIT: "true"
-    profiles:
-      - dbt-gold
+    profiles: ["manual"]
     env_file: .env
     command: bash docker/entrypoint-dbt-gold.sh
 
@@ -113,8 +112,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    profiles:
-      - generate-cdc-traffic
+    profiles: ["manual"]
     depends_on:
       - postgres
     env_file: .env
@@ -138,8 +136,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    profiles:
-      - deploy-databricks-jobs
+    profiles: ["manual"]
     env_file: .env
     volumes:
       # push_secrets_to_databricks.py reads .env directly via dotenv_values(".env")
@@ -155,8 +152,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    profiles:
-      - upload-vault-config
+    profiles: ["manual"]
     env_file: .env
     command: python3 scripts/upload_vault_config.py
 
