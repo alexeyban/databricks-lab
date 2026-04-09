@@ -1,4 +1,26 @@
 # AGENTS.md
+
+## Workflow for Changes
+
+**Before making any changes to this repository:**
+
+1. Create a new branch for your changes
+2. Make your changes on that branch
+3. Create a pull request
+4. **Wait for human approval** before merging
+
+```bash
+# Example workflow
+git checkout -b feature/your-feature-name
+# ... make your changes ...
+git add .
+git commit -m "Description of changes"
+git push -u origin feature/your-feature-name
+# Then create PR via GitHub UI or: gh pr create --title "..." --body "..."
+```
+
+Do NOT commit directly to main/master.
+
 ## Purpose
 This repository is a Databricks CDC lakehouse lab with:
 - local Docker infrastructure
