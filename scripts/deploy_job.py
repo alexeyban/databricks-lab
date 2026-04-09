@@ -129,7 +129,7 @@ def build_bronze_job(checkpoint_root: str) -> JobSettings:
     return _base_settings("dvdrental-bronze", tasks)
 
 
-def build_silver_job(checkpoint_root: str) -> JobSettings:
+def build_silver_job(checkpoint_root: str, full_reload: bool = False) -> JobSettings:
     tasks = [
         _task(
             key=f"ingest_{table}_to_silver",
@@ -142,6 +142,7 @@ def build_silver_job(checkpoint_root: str) -> JobSettings:
                 "CHECKPOINT_ROOT": checkpoint_root,
                 "MONITORING_SCHEMA": "monitoring",
                 "SCHEMA_POLICY": "additive_only",
+                "FULL_RELOAD": "true" if full_reload else "false",
             },
         )
         for table in SILVER_TABLES
@@ -265,6 +266,9 @@ def main() -> None:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--checkpoint-suffix", default="",
                         help="Suffix for checkpoint paths to force a fresh start (e.g. 'v3')")
+    parser.add_argument("--full-reload", action="store_true",
+                        help="Deploy Silver job with FULL_RELOAD=true (batch mode, no checkpoint). "
+                             "Use for E2E test resets after Bronze truncation.")
     parser.add_argument("--run", action="store_true",
                         help="Trigger the orchestrator immediately after deploying")
     parser.add_argument("--webhook-url", default="",
@@ -285,7 +289,7 @@ def main() -> None:
     bronze_id  = _upsert_job(w, "dvdrental-bronze",
                              build_bronze_job(checkpoint_root))
     silver_id  = _upsert_job(w, "dvdrental-silver",
-                             build_silver_job(checkpoint_root))
+                             build_silver_job(checkpoint_root, full_reload=args.full_reload))
     vault_id   = _upsert_job(w, "dvdrental-vault",
                              build_vault_job())
     orch_id    = _upsert_job(w, "dvdrental-orchestrator",
