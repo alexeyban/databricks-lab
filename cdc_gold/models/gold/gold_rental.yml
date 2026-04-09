@@ -3,6 +3,9 @@ version: 2
 models:
   - name: gold_rental
     description: Current-state Gold rental mart with payment totals and rental status.
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
     columns:
       - name: rental_id
         description: Unique rental identifier
@@ -27,6 +30,12 @@ models:
           - not_null
           - accepted_values:
               values: ['open', 'returned']
+      - name: total_paid
+        description: Sum of payments for this rental
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 200
       - name: last_updated_dt
         description: Timestamp of the last CDC update to this record
         tests:
@@ -34,6 +43,9 @@ models:
 
   - name: gold_film
     description: Current-state Gold film catalogue with rental rate tier classification.
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
     columns:
       - name: film_id
         description: Unique film identifier
@@ -48,6 +60,9 @@ models:
         description: Current rental rate
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0.99
+              max_value: 4.99
       - name: rental_rate_tier
         description: Rental rate classification (budget, standard, premium)
         tests:

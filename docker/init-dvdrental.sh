@@ -7,7 +7,10 @@ echo "=== Setting up dvdrental database ==="
 # Strip lines not supported by PG15 (e.g. transaction_timeout from PG16+ dumps)
 echo "Restoring dvdrental into database '${POSTGRES_DB}'..."
 grep -v "transaction_timeout" /tmp/dvdrental.sql \
+  | sed 's/English_United States\.1252/en_US.utf8/g' \
+  | sed 's|\$\$PATH\$\$|/tmp/data|g' \
   | psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" --set ON_ERROR_STOP=off -q
+
 echo "dvdrental restored successfully"
 
 # Set up logical replication publication and slot

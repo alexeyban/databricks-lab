@@ -1,0 +1,4 @@
+# Requirements for the dbt Gold layer container.
+# Kept separate from requirements.txt because dbt-databricks pins databricks-sdk
+# to a version incompatible with the databricks-sdk==0.98.0 used by scripts/.
+dbt-databricks==1.9.3

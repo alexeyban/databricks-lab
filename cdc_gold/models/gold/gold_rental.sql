@@ -45,9 +45,10 @@ prepared as (
 
 select *
 from prepared
+where {{ suppress_erased_subjects('customer_id', 'silver_customer') }}
 {% if is_incremental() %}
-where last_updated_dt >= (
+  and last_updated_dt >= (
     select coalesce(max(last_updated_dt), cast('1900-01-01' as timestamp))
     from {{ this }}
-)
+  )
 {% endif %}

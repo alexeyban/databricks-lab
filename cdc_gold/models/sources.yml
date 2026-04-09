@@ -1,6 +1,19 @@
 version: 2
 
 sources:
+  - name: monitoring
+    schema: monitoring
+    tables:
+      - name: erasure_registry
+        description: Subjects whose data has been suppressed via GDPR erasure requests.
+        columns:
+          - name: subject_id
+            description: Subject identifier (e.g. customer_id)
+          - name: subject_type
+            description: Type of subject (e.g. silver_customer)
+          - name: suppressed_at
+            description: Timestamp when suppression was applied
+
   - name: silver
     schema: silver
     freshness:

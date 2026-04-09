@@ -15,7 +15,7 @@ Prefer the bundled scripts over rewriting shell commands. They encode the reposi
 
 ### 1. Inspect the repo inputs first
 
-- Confirm `docker-compose.yml`, `postgres-connector.json`, `Orders-ingest-job.yaml`, and the target notebook paths exist.
+- Confirm `docker-compose.yml`, `postgres-connector.json`, and the target notebook paths exist.
 - Read [references/repo-workflow.md](./references/repo-workflow.md) if you need the repo-specific sequence or parameters.
 
 ### 2. Bring up the local CDC stack

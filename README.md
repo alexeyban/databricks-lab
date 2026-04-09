@@ -56,6 +56,14 @@ PostgreSQL dvdrental (WAL)
 | Gold | `workspace.gold.gold_film` | film_id |
 | Gold | `workspace.gold.gold_rental` | rental_id |
 | Monitoring | `workspace.monitoring.schema_drift_log` | — |
+| Monitoring | `workspace.monitoring.dq_results` | — |
+| Monitoring | `workspace.monitoring.pii_column_registry` | — |
+| Monitoring | `workspace.monitoring.subject_key_store` | — |
+| Monitoring | `workspace.monitoring.erasure_requests` | — |
+| Monitoring | `workspace.monitoring.erasure_registry` | — |
+| Monitoring | `workspace.monitoring.erasure_audit_log` | — |
+| Monitoring | `workspace.monitoring.vault_load_log` | — |
+| Bronze | `workspace.bronze.quarantine` | — |
 
 ## Quick Start
 
@@ -100,28 +108,42 @@ set -a && source .env && set +a
 python3 scripts/upload_vault_config.py
 ```
 
-### 4. Deploy Databricks Jobs
+### 4. Upload PII Config
+
+```bash
+# pii_config.json must be in the Volume alongside dv_model.json
+python3 scripts/upload_vault_config.py   # uploads dv_model.json
+# Then upload pii_config manually or add to upload script:
+# databricks fs cp pipeline_configs/pii/pii_config.json \
+#   dbfs:/Volumes/workspace/default/mnt/pipeline_configs/pii/pii_config.json
+```
+
+### 5. Deploy Databricks Jobs
 
 ```bash
 set -a && source .env && set +a
 
-# Deploy all 4 jobs (Bronze / Silver / Vault / Orchestrator)
-python3 scripts/deploy_job.py --kafka-bootstrap <ngrok-host:port>
+# Push Kafka bootstrap to Databricks secret scope 'dvdrental' first
+python3 scripts/push_secrets_to_databricks.py
 
-# Deploy and immediately trigger the full pipeline
-python3 scripts/deploy_job.py --kafka-bootstrap <ngrok-host:port> --run
+# Deploy all 5 jobs (Bronze / Silver / Vault / Orchestrator / DQ-GDPR)
+python3 scripts/deploy_job.py
+
+# Deploy with Slack alerting + run immediately
+python3 scripts/deploy_job.py --webhook-url https://hooks.slack.com/... --run
 ```
 
-This creates/updates four Databricks jobs:
+This creates/updates five Databricks jobs:
 
-| Job | What it does |
-|-----|-------------|
-| `dvdrental-bronze` | Kafka → 15 Bronze Delta tables (streaming) |
-| `dvdrental-silver` | 15 parallel Bronze → Silver tasks (generic notebook) |
-| `dvdrental-vault` | Hubs → Links + Satellites (parallel) → Business Vault |
-| `dvdrental-orchestrator` | Chains the three jobs above in sequence |
+| Job | What it does | Schedule |
+|-----|-------------|----------|
+| `dvdrental-bronze` | Kafka → 15 Bronze Delta tables (streaming) | on-demand |
+| `dvdrental-silver` | 15 parallel Bronze → Silver tasks (generic notebook) | on-demand |
+| `dvdrental-vault` | Hubs → Links + Satellites (parallel) → Business Vault | on-demand |
+| `dvdrental-orchestrator` | Chains the three jobs above in sequence | on-demand |
+| `dvdrental-dq-gdpr` | VACUUM Bronze + process erasure requests + SLA checks | daily 02:00 UTC |
 
-### 5. Generate CDC Traffic
+### 6. Generate CDC Traffic
 
 ```bash
 # Film updates (rental_rate, rental_duration, replacement_cost)
@@ -134,12 +156,13 @@ python3 generators/load_generator.py
 # DB env vars: PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD
 ```
 
-### 6. dbt Gold Layer
+### 7. dbt Gold Layer
 
 ```bash
 cd cdc_gold
+dbt deps           # install dbt_utils + dbt_expectations packages
 dbt debug          # verify connection
-dbt build          # run models + tests
+dbt build          # run models + tests (writes results to monitoring.dq_results)
 dbt test           # data quality tests only
 ```
 
@@ -166,20 +189,37 @@ notebooks/
   vault/NB_ingest_to_links.ipynb                Silver → 19 Link tables (insert-only)
   vault/NB_ingest_to_satellites.ipynb           Silver → 15 Satellites (append-only, DIFF_HK)
   vault/NB_dv_business_vault.ipynb              PIT tables + Bridge tables
-  helpers/NB_catalog_helpers.ipynb              Table/schema creation utilities
-  helpers/NB_schema_drift_helpers.ipynb         Schema drift detection + alerting
+  helpers/NB_catalog_helpers.ipynb              Table/schema creation utilities + DQ/monitoring DDL
+  helpers/NB_schema_drift_helpers.ipynb         Schema drift detection + alerting (DQ + GDPR SLA)
   helpers/NB_schema_contracts.ipynb             Expected schema definitions (Bronze/Silver/Gold)
   helpers/NB_silver_metadata.ipynb              Silver metadata loader (pipeline_configs/*.json)
   helpers/NB_reset_tables.ipynb                 Drop all tables + clear checkpoints
+  helpers/NB_pii_catalog_helpers.ipynb          Apply Unity Catalog PII tags + populate pii_column_registry
+  helpers/NB_key_management_helpers.ipynb       AES-256-GCM DEK management (get/create/encrypt/decrypt/shred)
+  helpers/NB_process_erasure.ipynb              6-step GDPR crypto-shredding erasure pipeline
 
 pipeline_configs/
   silver/dvdrental/*.json         15 Silver table configs (field mappings, PKs, transforms)
   datavault/dv_model.json         Approved DV 2.0 model (13 hubs, 19 links, 15 sats, 4 PITs, 2 bridges)
+  pii/pii_config.json             PII column inventory: sensitivity, subject_id_col, encrypt flag
 
 scripts/
-  deploy_job.py                   Create/update all 4 Databricks jobs; optionally trigger run
+  deploy_job.py                   Create/update all 5 Databricks jobs; optionally trigger run
+  reset_checkpoints.py            Delete Silver/Bronze streaming checkpoints before E2E reload
   upload_vault_config.py          Upload dv_model.json to Unity Catalog Volume (run once)
   smoke_test_vault.py             Validate vault row counts via SQL execution API
+
+dq_queries/silver/               Reference SQL for ad-hoc DQ validation
+  check_rental_pk.sql            Rental PK uniqueness
+  check_customer_pk.sql          Customer PK uniqueness
+  check_film_pk.sql              Film PK uniqueness
+  check_rental_fk_customer.sql   Rental → customer FK null rate
+  check_payment_amount.sql       Payment amount range [0.99, 11.99]
+
+design/
+  dq_gdpr/IMPLEMENTATION_PLAN.md  Full 4-phase DQ + GDPR implementation plan
+  runbooks/DQ_INCIDENT_RUNBOOK.md DQ failure triage + escalation guide
+  runbooks/ERASURE_SOP.md         GDPR erasure step-by-step SOP (30-day SLA)
 
 cdc_gold/                         dbt project for Gold models
 ```
@@ -259,11 +299,14 @@ Builds PIT (Point-in-Time) and Bridge tables from the vault layer.
 
 ### Helpers
 
-- **NB_catalog_helpers**: `ensure_schema_exists`, `build_merge_clauses`, `execute_merge`
-- **NB_schema_drift_helpers**: `validate_schema_with_policy`, `SchemaDriftException`, webhook/email/log alerting
+- **NB_catalog_helpers**: `ensure_schema_exists`, `build_merge_clauses`, `execute_merge`, `ensure_monitoring_tables`, `write_dq_result`, `ensure_bronze_quarantine`, `set_bronze_ttl`, `check_volume_anomaly`, `ensure_vault_load_log`
+- **NB_schema_drift_helpers**: `validate_schema_with_policy`, `SchemaDriftException`, `alert_dq_failure`, `alert_erasure_sla_risk`, webhook/email/log alerting
 - **NB_schema_contracts**: expected Bronze/Silver schemas for all 15 tables
 - **NB_silver_metadata**: `get_silver_table_config(table_id)` — loads per-table config from `pipeline_configs/silver/dvdrental/`
 - **NB_reset_tables**: drops all Bronze/Silver/Gold/monitoring tables + clears checkpoints
+- **NB_pii_catalog_helpers**: loads `pii_config.json`, applies UC column tags, writes `monitoring.pii_column_registry`
+- **NB_key_management_helpers**: `get_or_create_dek`, `get_dek_map`, `encrypt_value`, `decrypt_value`, `shred_subject`
+- **NB_process_erasure**: 6-step GDPR erasure (suppress → shred → delete Bronze → validate → complete)
 
 ## Schema Evolution
 
@@ -328,34 +371,90 @@ Upload the model file with `scripts/upload_vault_config.py` before the first run
 
 Chains the three jobs above: Bronze → Silver → Vault. No git source — uses `run_job_task`.
 
+### dvdrental-dq-gdpr
+
+Daily maintenance job (02:00 UTC). Three independent tasks:
+- `vacuum_bronze_tables` — VACUUM all 15 Bronze tables, RETAIN 720 hours
+- `process_erasure_requests` — run `NB_process_erasure` for all pending requests
+- `check_erasure_sla` — alert on erasure requests older than 25 days (30-day SLA window)
+
 ### Deploy / redeploy
 
 ```bash
 set -a && source .env && set +a
 
 # Deploy only (or update existing jobs)
-python3 scripts/deploy_job.py --kafka-bootstrap <host:port>
+python3 scripts/deploy_job.py
 
-# Deploy + force fresh checkpoints + run immediately
-python3 scripts/deploy_job.py --kafka-bootstrap <host:port> --checkpoint-suffix v4 --run
+# Deploy with Slack webhook + fresh checkpoints + run immediately
+python3 scripts/deploy_job.py --webhook-url https://hooks.slack.com/... \
+  --checkpoint-suffix v4 --run
+```
+
+### E2E Test Reset (full reload from scratch)
+
+Silver uses Delta streaming with checkpoints stored in a Unity Catalog Volume.
+When Bronze tables are truncated and reloaded (e.g. after a `docker compose down -v`),
+the checkpoint is ahead of the new data and Silver sees 0 new rows.
+**Always delete checkpoints before a test full-reload.**
+
+```bash
+set -a && source .env && set +a
+
+# See what would be deleted (no changes)
+python3 scripts/reset_checkpoints.py --checkpoint-suffix v8 --dry-run
+
+# Delete Silver checkpoints only
+python3 scripts/reset_checkpoints.py --checkpoint-suffix v8
+
+# Delete Silver + Bronze Auto Loader checkpoints (full E2E reset)
+python3 scripts/reset_checkpoints.py --checkpoint-suffix v8 --include-bronze
+
+# Delete ALL checkpoint suffixes found on the Volume
+python3 scripts/reset_checkpoints.py --all-suffixes --include-bronze
+
+# Reset checkpoints and immediately trigger the orchestrator
+python3 scripts/reset_checkpoints.py --checkpoint-suffix v8 --include-bronze --run
+```
+
+Typical E2E test flow:
+
+```bash
+# 1. Restart Docker CDC stack
+docker compose down -v && docker compose up -d
+curl -X POST http://localhost:8083/connectors -H 'Content-Type: application/json' \
+  --data @postgres-connector.json
+
+# 2. Start kafka-to-volume to fill the Bronze landing zone
+docker compose --profile kafka-to-volume up -d kafka-to-volume
+
+# 3. Reset checkpoints so Silver re-reads all Bronze data from version 0
+set -a && source .env && set +a
+python3 scripts/reset_checkpoints.py --checkpoint-suffix v8 --include-bronze
+
+# 4. Deploy and run the full pipeline
+python3 scripts/deploy_job.py --checkpoint-suffix v8
+python3 scripts/reset_checkpoints.py --checkpoint-suffix v8 --run
 ```
 
 ## ngrok for Local Development
 
-Databricks Serverless cannot reach a local Kafka directly. Expose it via ngrok:
+Databricks Serverless cannot reach a local Kafka directly. Use the built-in skill to
+set up an ngrok TCP tunnel and push the bootstrap address to Databricks secrets:
 
 ```bash
-ngrok tcp 9093
-# → e.g. 6.tcp.eu.ngrok.io:16223
-export KAFKA_EXTERNAL_HOST=6.tcp.eu.ngrok.io
-export KAFKA_EXTERNAL_PORT=16223
-docker compose up -d
+# Sets up ngrok tunnel, updates .env, pushes secrets, and redeploys Bronze job
+bash .claude/skills/ngrok-kafka-setup/scripts/setup_ngrok_kafka.sh
 ```
 
-Pass the ngrok address as `--kafka-bootstrap` when deploying. Note: Databricks Serverless
-has outbound network restrictions that may block ngrok endpoints depending on workspace
-configuration. If Bronze fails with a Kafka timeout, run Silver and Vault independently
-(Bronze Delta tables from a previous run persist in Unity Catalog).
+The Bronze notebook reads `kafka-external-host` and `kafka-external-port` from the
+`dvdrental` Databricks secret scope at runtime — no bootstrap address in job parameters.
+
+To push updated secrets manually:
+```bash
+set -a && source .env && set +a
+python3 scripts/push_secrets_to_databricks.py
+```
 
 ## Secret Hygiene
 
@@ -409,6 +508,58 @@ python -m generators.dv_generator.main --analyze \
 | `design/dv2/DV2_VAULT_LAYER_PLAN.md` | Full vault design (hubs/links/sats/PITs/bridges) |
 | `design/dv2/DV2_GENERATOR_DESIGN.md` | Generator architecture decisions |
 | `design/dv2/IMPLEMENTATION_LOG.md` | Module completion status |
+
+## Data Quality + GDPR
+
+Full implementation plan: `design/dq_gdpr/IMPLEMENTATION_PLAN.md`
+
+### Data Quality
+
+DQ checks run automatically at every layer and write results to `workspace.monitoring.dq_results`:
+
+| Layer | Checks | On FAIL |
+|-------|--------|---------|
+| Bronze | Envelope validation (JSON/op/freshness), volume anomaly detection | Bad rows → `bronze.quarantine`, Slack WARN |
+| Silver | PK uniqueness, rental FK null rate, payment amount range | Exception raised, Slack alert |
+| Vault | Hub HK uniqueness, Link FK presence, Satellite orphan check, PIT/Bridge row counts | Exception raised, Slack alert |
+| Gold | dbt tests (unique, not_null, accepted_values, dbt_expectations), Silver ↔ Gold payment reconciliation | dbt failure, written to dq_results |
+
+```sql
+-- Recent DQ failures
+SELECT layer, table_name, check_name, status, observed_value, message, checked_at
+FROM workspace.monitoring.dq_results
+WHERE status IN ('FAIL', 'WARN')
+  AND checked_at >= current_timestamp() - INTERVAL 24 HOURS
+ORDER BY checked_at DESC;
+```
+
+### GDPR Crypto-Shredding
+
+PII columns in `silver_customer`, `silver_staff`, and `silver_address` are encrypted with per-subject AES-256-GCM DEKs at the Silver merge step. Erasure is performed via key deletion — ciphertext becomes permanently unreadable.
+
+> **Dev warning:** DEKs use Databricks secret scopes. Replace with Azure Key Vault / AWS KMS for production.
+
+**Erasure flow:**
+
+```
+INSERT INTO monitoring.erasure_requests (request_id, subject_id, subject_type, ...)
+→ Run NB_process_erasure with DRY_RUN=true  (review)
+→ Run NB_process_erasure with DRY_RUN=false (execute 6 steps)
+→ Verify monitoring.erasure_audit_log has 6 rows
+→ Verify Gold excludes subject (dbt run)
+```
+
+See `design/runbooks/ERASURE_SOP.md` for the full SOP.
+
+**Monitoring tables:**
+
+| Table | Purpose |
+|-------|---------|
+| `monitoring.pii_column_registry` | PII inventory (table, column, sensitivity, encrypt flag) |
+| `monitoring.subject_key_store` | DEK lifecycle tracking (created_at, shredded_at) |
+| `monitoring.erasure_requests` | Incoming GDPR erasure requests |
+| `monitoring.erasure_registry` | Suppressed subjects (Gold anti-join filter) |
+| `monitoring.erasure_audit_log` | 6-step audit trail per erasure |
 
 ## Agent System
 
