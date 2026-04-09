@@ -6,7 +6,7 @@
     "database.port": "5432",
     "database.user": "postgres",
     "database.password": "postgres",
-    "database.dbname": "demo",
+    "database.dbname": "dvdrental",
     "database.server.name": "demo-server",
     "plugin.name": "pgoutput",
     "publication.name": "dbz_publication",

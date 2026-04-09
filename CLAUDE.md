@@ -138,9 +138,31 @@ python3 scripts/upload_vault_config.py
 The notebooks read it from `/Volumes/workspace/default/mnt/pipeline_configs/datavault/dv_model.json`.
 Re-run whenever `pipeline_configs/datavault/dv_model.json` changes.
 
+### ngrok for Local Development
+
+Databricks Serverless cannot reach a local Kafka directly — expose it via ngrok:
+
+```bash
+ngrok tcp 9093
+# → e.g. 6.tcp.eu.ngrok.io:16223
+export KAFKA_EXTERNAL_HOST=6.tcp.eu.ngrok.io
+export KAFKA_EXTERNAL_PORT=16223
+docker compose up -d
+```
+
+Pass the ngrok address as `--kafka-bootstrap` when deploying. If Bronze fails with a Kafka timeout, run Silver and Vault independently — Bronze Delta tables from a previous run persist in Unity Catalog.
+
 ### Schema Evolution (Silver Layer)
 
 Silver notebooks dynamically detect new columns in Debezium events, add them to Delta tables via `.option("mergeSchema", "true")`, and rebuild MERGE statements from the current table schema. All schema changes are logged to `monitoring.schema_drift_log`.
+
+Schema drift policies (set via `SCHEMA_POLICY` notebook parameter):
+
+| Policy | Behaviour | Default layer |
+|--------|-----------|--------------|
+| `permissive` | Log only, never block | Bronze |
+| `additive_only` | Allow new columns; block removals/type changes | Silver |
+| `strict` | Block on any schema change | Gold |
 
 ### Numeric Decoding (Debezium)
 

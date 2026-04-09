@@ -41,10 +41,11 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: demo
+      POSTGRES_DB: dvdrental
     volumes:
       - ./docker/init-dvdrental.sh:/docker-entrypoint-initdb.d/init.sh
-      - ${DVDRENTAL_SQL_PATH:-./scripts/dvdrental.sql}:/tmp/dvdrental.sql
+      - ${DVDRENTAL_SQL_PATH:-./docker/dvdrental.sql}:/tmp/dvdrental.sql
+      - ./docker/data:/tmp/data
     command: >
       postgres
       -c wal_level=logical
@@ -81,6 +82,83 @@ services:
     environment:
       KAFKA_CLUSTERS_0_NAME: local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+
+  # Runs the full dbt Gold layer against Databricks:
+  #   dbt deps → dbt debug → dbt build → dbt test
+  # Requires DATABRICKS_HOST, DATABRICKS_TOKEN, DATABRICKS_WAREHOUSE_ID in .env.
+  #
+  # Run:
+  #   docker compose --profile dbt-gold run --rm dbt-gold
+  dbt-gold:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        REQUIREMENTS_FILE: requirements-dbt.txt
+        INSTALL_GIT: "true"
+    profiles:
+      - dbt-gold
+    env_file: .env
+    command: bash docker/entrypoint-dbt-gold.sh
+
+  # Generates CDC traffic: film UPDATEs (load_products_generator) + rental/payment
+  # INSERTs/UPDATEs (load_generator) running in parallel against the postgres service.
+  # Both generators are infinite loops by default; set ITERATIONS to bound them.
+  #
+  # Start alongside the main stack:
+  #   docker compose --profile generate-cdc-traffic up -d generate-cdc-traffic
+  # Stop:
+  #   docker compose --profile generate-cdc-traffic stop generate-cdc-traffic
+  generate-cdc-traffic:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles:
+      - generate-cdc-traffic
+    depends_on:
+      - postgres
+    env_file: .env
+    environment:
+      # PGHOST overrides .env: "postgres" is the Docker service name, not localhost
+      - PGHOST=postgres
+      # Passed through only when set on the host — empty vars would break
+      # env_float/env_int in the generator scripts (float("") raises ValueError).
+      - ITERATIONS
+      - SLEEP_MIN
+      - SLEEP_MAX
+    command: bash docker/entrypoint-generate-cdc-traffic.sh
+    restart: unless-stopped
+
+  # Pushes secrets to Databricks scope 'dvdrental' and deploys all pipeline jobs.
+  # Run once after filling in .env, and again whenever jobs or credentials change:
+  #   docker compose --profile deploy-databricks-jobs run --rm deploy-databricks-jobs
+  # Override DEPLOY_ARGS in .env to pass flags to deploy_job.py, e.g.:
+  #   DEPLOY_ARGS=--checkpoint-suffix v2 --run
+  deploy-databricks-jobs:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles:
+      - deploy-databricks-jobs
+    env_file: .env
+    volumes:
+      # push_secrets_to_databricks.py reads .env directly via dotenv_values(".env")
+      - ./.env:/app/.env:ro
+    command: >
+      bash -c "python3 scripts/push_secrets_to_databricks.py &&
+               python3 scripts/deploy_job.py $${DEPLOY_ARGS}"
+
+  # Uploads pipeline_configs/datavault/dv_model.json to the Unity Catalog Volume.
+  # Run once before the first vault job (or after any dv_model.json change):
+  #   docker compose --profile upload-vault-config run --rm upload-vault-config
+  upload-vault-config:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles:
+      - upload-vault-config
+    env_file: .env
+    command: python3 scripts/upload_vault_config.py
 
   # Optional: local consumer that uploads CDC events to the Databricks Volume
   # landing zone so the Bronze notebook can use Auto Loader instead of direct
