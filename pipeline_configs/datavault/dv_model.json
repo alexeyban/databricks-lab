@@ -886,9 +886,7 @@
         "description",
         "release_year",
         "length",
-        "rating",
-        "special_features",
-        "fulltext"
+        "rating"
       ],
       "load_date_column": "last_update",
       "record_source": "cdc.dvdrental.film",
