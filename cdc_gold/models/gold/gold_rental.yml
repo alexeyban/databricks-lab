@@ -36,7 +36,6 @@ models:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 200
-              mostly: 0.99
       - name: last_updated_dt
         description: Timestamp of the last CDC update to this record
         tests:
