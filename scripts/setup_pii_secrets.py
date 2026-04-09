@@ -22,6 +22,7 @@ from databricks.sdk import WorkspaceClient
 SCOPE   = "dvdrental-dq"         # holds master-kek only
 KEK_KEY = "master-kek"
 CATALOG = "workspace"
+AES_KEY_SIZE = 32  # AESGCM  (must be 16, 24, or 32 bytes for 128, 192, or 256 bits respectively)
 
 # Per-subject-type DEK scopes: each has up to 1000 DEK slots (1 per subject)
 DEK_SCOPES = [
@@ -62,9 +63,13 @@ def main() -> None:
         w.secrets.get_secret(scope=SCOPE, key=KEK_KEY)
         print(f"  '{SCOPE}/{KEK_KEY}' already exists — skipping")
     except Exception:
-        kek = base64.b64encode(os.urandom(32)).decode()
+        kek = base64.b64encode(os.urandom(AES_KEY_SIZE)).decode()
         w.secrets.put_secret(scope=SCOPE, key=KEK_KEY, string_value=kek)
         print(f"  Created '{SCOPE}/{KEK_KEY}' (32-byte random KEK)")
+    # for DEBUG full rewrite all keys
+    # kek = base64.b64encode(os.urandom(AES_KEY_SIZE)).decode()
+    # w.secrets.put_secret(scope=SCOPE, key=KEK_KEY, string_value=kek)
+    # print(f"  Created '{SCOPE}/{KEK_KEY}' ({AES_KEY_SIZE}-byte random KEK)")
 
     # ── 4. monitoring.subject_key_store ──────────────────────────────────────
     print("Delta table:")
