@@ -15,7 +15,21 @@ PostgreSQL dvdrental (WAL)
           → dbt Gold (business-ready models with data quality tests)
 ```
 
+### Alternative: kafka-to-volume (no ngrok required)
+
+Databricks Serverless cannot reach a local ngrok Kafka endpoint. Use the built-in
+`kafka-to-volume` Docker profile to upload CDC events to a Databricks Volume landing zone,
+allowing Bronze to use Auto Loader instead of direct Kafka connectivity.
+
+```bash
+docker compose --profile kafka-to-volume up -d kafka-to-volume
+```
+
 ### Source Tables (PostgreSQL dvdrental — all 15)
+
+> **Note:** When using local ngrok for Kafka connectivity, 3 tables (`category`, `country`,
+> `film_actor`) may not reach Bronze due to Databricks Serverless network limitations.
+> Use the `kafka-to-volume` Docker profile as a workaround (see Architecture section).
 
 **Reference / Dimension**
 
@@ -84,6 +98,13 @@ curl http://localhost:8083/connectors/postgres-connector/status
 
 # Kafka UI
 open http://localhost:8085
+```
+
+**Alternative (no ngrok required):** If Databricks Serverless cannot reach your local Kafka,
+use the kafka-to-volume container to upload CDC events to a Volume landing zone:
+
+```bash
+docker compose --profile kafka-to-volume up -d kafka-to-volume
 ```
 
 PostgreSQL initialises from `docker/init-dvdrental.sh` on first start — restores the full
@@ -166,6 +187,25 @@ dbt build          # run models + tests (writes results to monitoring.dq_results
 dbt test           # data quality tests only
 ```
 
+### 8. Generate Confluence Documentation
+
+```bash
+python3 runtime/confluence_doc_generator.py [output_dir]
+```
+
+Outputs:
+- `docs/confluence_html.html` — HTML for Confluence paste
+- `docs/confluence_markdown.md` — Markdown for Confluence
+- `docs/diagrams/*.mmd` — Mermaid diagrams for architecture docs
+
+### 9. Normalize Notebooks
+
+After editing notebook JSON directly, normalize formatting:
+
+```bash
+python3 runtime/normalize_notebooks.py <notebook> [<notebook> ...]
+```
+
 ## Repository Layout
 
 ```
@@ -176,14 +216,20 @@ docker/init-dvdrental.sh        PostgreSQL init: restore dvdrental, create publi
 generators/
   load_generator.py             Rental inserts, returns, payment inserts
   load_products_generator.py    Film attribute updates
+  load_reference_generator.py  Static reference data loader
   dv_generator/                 DV 2.0 meta-tool (analyze → review → apply)
+
+runtime/
+  databricks_client.py          Databricks REST API client
+  confluence_doc_generator.py  Generates Confluence-ready docs with Mermaid diagrams
+  normalize_notebooks.py        Normalizes notebooks after JSON edits
 
 notebooks/
   bronze/NB_ingest_to_bronze.ipynb              Kafka → Bronze Delta (topic pattern cdc.public.*)
   silver/NB_process_to_silver_generic.ipynb     Metadata-driven Bronze → Silver (all 15 tables)
-  silver/NB_process_to_silver.ipynb             Legacy: rental-specific MERGE (kept for reference)
-  silver/NB_process_products_silver.ipynb       Legacy: film-specific MERGE (kept for reference)
-  silver/NB_process_payment_silver.ipynb        Legacy: payment-specific MERGE (kept for reference)
+  silver/outdated__NB_process_to_silver.ipynb    Legacy: rental-specific MERGE (reference only)
+  silver/outdated__NB_process_products_silver.ipynb  Legacy: film-specific MERGE (reference only)
+  silver/outdated__NB_process_payment_silver.ipynb   Legacy: payment-specific MERGE (reference only)
   vault/NB_dv_metadata.ipynb                    DV 2.0 config parser + hash key / DDL helpers
   vault/NB_ingest_to_hubs.ipynb                 Silver → 13 Hub tables (SHA-256 insert-only)
   vault/NB_ingest_to_links.ipynb                Silver → 19 Link tables (insert-only)
@@ -197,9 +243,12 @@ notebooks/
   helpers/NB_pii_catalog_helpers.ipynb          Apply Unity Catalog PII tags + populate pii_column_registry
   helpers/NB_key_management_helpers.ipynb       AES-256-GCM DEK management (get/create/encrypt/decrypt/shred)
   helpers/NB_process_erasure.ipynb              6-step GDPR crypto-shredding erasure pipeline
+  helpers/NB_confluence_generator.ipynb         Generates Confluence documentation
 
 pipeline_configs/
   silver/dvdrental/*.json         15 Silver table configs (field mappings, PKs, transforms)
+  silver/orders.json              Demo: order processing config
+  silver/products.json           Demo: product catalog config
   datavault/dv_model.json         Approved DV 2.0 model (13 hubs, 19 links, 15 sats, 4 PITs, 2 bridges)
   pii/pii_config.json             PII column inventory: sensitivity, subject_id_col, encrypt flag
 
@@ -208,6 +257,10 @@ scripts/
   reset_checkpoints.py            Delete Silver/Bronze streaming checkpoints before E2E reload
   upload_vault_config.py          Upload dv_model.json to Unity Catalog Volume (run once)
   smoke_test_vault.py             Validate vault row counts via SQL execution API
+  push_secrets_to_databricks.py  Push Kafka bootstrap + DEK secrets to Databricks Secret Scope
+  kafka_to_volume.py              Uploads Kafka events to Volume landing zone (cloud Kafka alternative)
+  setup_pii_secrets.py            Sets up PII encryption secrets in Databricks
+  apply_vault_comments.py        Adds table/column comments to vault tables
 
 dq_queries/silver/               Reference SQL for ad-hoc DQ validation
   check_rental_pk.sql            Rental PK uniqueness
@@ -215,6 +268,9 @@ dq_queries/silver/               Reference SQL for ad-hoc DQ validation
   check_film_pk.sql              Film PK uniqueness
   check_rental_fk_customer.sql   Rental → customer FK null rate
   check_payment_amount.sql       Payment amount range [0.99, 11.99]
+
+Agents/                          24 specialized agent role definitions (data-engineer, architect, etc.)
+skills/                          24 reusable skill definitions (docker-databricks-lab-ops, job-operator, etc.)
 
 design/
   dq_gdpr/IMPLEMENTATION_PLAN.md  Full 4-phase DQ + GDPR implementation plan
@@ -563,8 +619,32 @@ See `design/runbooks/ERASURE_SOP.md` for the full SOP.
 
 ## Agent System
 
-`/Agents/` — 24 markdown files defining specialised agent personalities.  
-`/skills/` — 24 reusable skill definitions.  
-`/runtime/` — Python agent loop (`autonomous_agent.py`) that generates code via LLM, uploads to Databricks, runs it, and retries on failures.
+This repository includes a local agent/skill catalog for specialized data engineering tasks.
+
+**Agents** (`/Agents/`): 24 markdown files defining specialized agent personalities:
+- `engineering-data-engineer.md` — CDC, dbt, pipeline, and data reliability work
+- `databricks_architect.md` — Databricks and lakehouse architecture
+- `lakehouse_data_architect.md` — Bronze/Silver/Gold contracts and model boundaries
+- `databricks-notebook-publisher.md` — publish local notebooks to Databricks workspaces
+- `databricks-job-operator.md` — run jobs, capture run_id, track terminal state
+- `databricks-notebook-remediator.md` — diagnose failed notebook runs and fix forward
+- `databricks-data-quality-analyst.md` — validate output quality beyond job success
+- `databricks-dq-automation.md` — run stored SQL DQ checks after pipeline updates
+- `spark_performance_engineer.md` — Spark tuning and execution-performance review
+- And 15 more in `/Agents/`
+
+**Skills** (`/skills/`): 24 reusable skill definitions for operational workflows:
+- `docker-databricks-lab-ops/` — primary operational workflow for stack bring-up, connector registration, generators, ngrok/Kafka wiring, Databricks runs, and smoke tests
+- `engineering-data-engineer/` — data-engineer specialization
+- `lakehouse-data-architect/` — medallion design and CDC model decisions
+- `databricks-notebook-publisher/` — publish notebooks to workspace
+- `databricks-job-operator/` — execute and monitor Databricks jobs
+- `databricks-notebook-remediator/` — diagnose and fix notebook failures
+- `databricks-data-quality-analyst/` — validate table/notebook outputs
+- `databricks-dq-automation/` — run repo-managed SQL DQ checks
+- `confluence-documentation-generator/` — generate Confluence-ready docs with Mermaid diagrams
+- And 15 more in `/skills/`
+
+The full catalog with recommended sequencing and role responsibilities is documented in `AGENTS.md`.
 
 See `AGENT_PROMPT_EXAMPLES.md` for prompt templates.
