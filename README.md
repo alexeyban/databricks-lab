@@ -205,6 +205,7 @@ pipeline_configs/
 
 scripts/
   deploy_job.py                   Create/update all 5 Databricks jobs; optionally trigger run
+  reset_checkpoints.py            Delete Silver/Bronze streaming checkpoints before E2E reload
   upload_vault_config.py          Upload dv_model.json to Unity Catalog Volume (run once)
   smoke_test_vault.py             Validate vault row counts via SQL execution API
 
@@ -388,6 +389,52 @@ python3 scripts/deploy_job.py
 # Deploy with Slack webhook + fresh checkpoints + run immediately
 python3 scripts/deploy_job.py --webhook-url https://hooks.slack.com/... \
   --checkpoint-suffix v4 --run
+```
+
+### E2E Test Reset (full reload from scratch)
+
+Silver uses Delta streaming with checkpoints stored in a Unity Catalog Volume.
+When Bronze tables are truncated and reloaded (e.g. after a `docker compose down -v`),
+the checkpoint is ahead of the new data and Silver sees 0 new rows.
+**Always delete checkpoints before a test full-reload.**
+
+```bash
+set -a && source .env && set +a
+
+# See what would be deleted (no changes)
+python3 scripts/reset_checkpoints.py --checkpoint-suffix v8 --dry-run
+
+# Delete Silver checkpoints only
+python3 scripts/reset_checkpoints.py --checkpoint-suffix v8
+
+# Delete Silver + Bronze Auto Loader checkpoints (full E2E reset)
+python3 scripts/reset_checkpoints.py --checkpoint-suffix v8 --include-bronze
+
+# Delete ALL checkpoint suffixes found on the Volume
+python3 scripts/reset_checkpoints.py --all-suffixes --include-bronze
+
+# Reset checkpoints and immediately trigger the orchestrator
+python3 scripts/reset_checkpoints.py --checkpoint-suffix v8 --include-bronze --run
+```
+
+Typical E2E test flow:
+
+```bash
+# 1. Restart Docker CDC stack
+docker compose down -v && docker compose up -d
+curl -X POST http://localhost:8083/connectors -H 'Content-Type: application/json' \
+  --data @postgres-connector.json
+
+# 2. Start kafka-to-volume to fill the Bronze landing zone
+docker compose --profile kafka-to-volume up -d kafka-to-volume
+
+# 3. Reset checkpoints so Silver re-reads all Bronze data from version 0
+set -a && source .env && set +a
+python3 scripts/reset_checkpoints.py --checkpoint-suffix v8 --include-bronze
+
+# 4. Deploy and run the full pipeline
+python3 scripts/deploy_job.py --checkpoint-suffix v8
+python3 scripts/reset_checkpoints.py --checkpoint-suffix v8 --run
 ```
 
 ## ngrok for Local Development
