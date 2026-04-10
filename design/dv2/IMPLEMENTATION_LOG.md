@@ -32,12 +32,23 @@ E2E test results (2026-04-06):
 - 19/19 tests passed (happy path, validation failures, error injection, caching, idempotency, CLI edge cases)
 - dvdrental model: 13 hubs, 19 links, 15 sats, 4 PITs, 2 bridges — 0 validation errors
 
+## Post-delivery improvements (2026-04-10)
+
+| Change | Files |
+|--------|-------|
+| `SatDef.column_types: dict[str, str]` — carries source type per tracked column through the generator pipeline | `models.py`, `step2_rule_engine.py`, `step3_artifact_gen.py` |
+| `column_types` serialised into `dv_model.json` for all 15 satellites | `pipeline_configs/datavault/dv_model.json` |
+| `create_sat_table()` maps `column_types` to Spark SQL DDL (`DECIMAL(18,6)`, `BOOLEAN`, `TIMESTAMP`, …) via `_SPARK_TYPE` dict | `notebooks/vault/NB_dv_metadata.ipynb` |
+| Silver → satellite type casting before `append` to prevent `DELTA_FAILED_TO_MERGE_FIELDS` | `notebooks/vault/NB_ingest_to_satellites.ipynb` |
+| Timestamp heuristic tightened: `"at" in col_name` → `col_name.endswith("_at")` (was matching `rating`, `rental_duration`, `special_features`) | `steps/step1_analyzer.py` |
+| `scripts/patch_dv_model_types.py` — one-off migration script to back-fill `column_types` into a pre-existing `dv_model.json` | `scripts/patch_dv_model_types.py` |
+
 ## What to do next
 
 See `ROADMAP.md` for prioritised next steps. Top items:
-1. Deploy vault notebooks to Databricks and validate against live Silver data
-2. Wire vault notebooks into `Orders-ingest-job.yaml`
-3. Run AI classifier (`step2b`) with real `LLM_API_KEY` + `DATABRICKS_WAREHOUSE_ID`
+1. Run AI classifier (`step2b`) with real `LLM_API_KEY` + `DATABRICKS_WAREHOUSE_ID`
+2. Expand dbt Gold layer (gold_customer, gold_inventory, gold_staff_performance)
+3. Add vault monitoring dashboard (hub/link/sat row counts over time)
 
 ## Key design decisions (quick ref)
 

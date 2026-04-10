@@ -1,0 +1,942 @@
+[
+  {
+    "name": "silver_actor",
+    "source_table": "silver.silver_actor",
+    "pk_columns": [
+      "actor_id"
+    ],
+    "fk_hints": {},
+    "columns": [
+      {
+        "name": "actor_id",
+        "data_type": "integer",
+        "nullable": false,
+        "is_pk": true,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "first_name",
+        "data_type": "varchar",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "last_name",
+        "data_type": "varchar",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "last_update",
+        "data_type": "timestamp",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      }
+    ]
+  },
+  {
+    "name": "silver_address",
+    "source_table": "silver.silver_address",
+    "pk_columns": [
+      "address_id"
+    ],
+    "fk_hints": {
+      "city_id": "silver_city"
+    },
+    "columns": [
+      {
+        "name": "address_id",
+        "data_type": "integer",
+        "nullable": false,
+        "is_pk": true,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "address",
+        "data_type": "varchar",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "address2",
+        "data_type": "varchar",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "district",
+        "data_type": "varchar",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "city_id",
+        "data_type": "integer",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": true,
+        "fk_table": "silver_city",
+        "fk_column": "city_id"
+      },
+      {
+        "name": "postal_code",
+        "data_type": "varchar",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "phone",
+        "data_type": "varchar",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "last_update",
+        "data_type": "timestamp",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      }
+    ]
+  },
+  {
+    "name": "silver_category",
+    "source_table": "silver.silver_category",
+    "pk_columns": [
+      "category_id"
+    ],
+    "fk_hints": {},
+    "columns": [
+      {
+        "name": "category_id",
+        "data_type": "integer",
+        "nullable": false,
+        "is_pk": true,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "name",
+        "data_type": "varchar",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "last_update",
+        "data_type": "timestamp",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      }
+    ]
+  },
+  {
+    "name": "silver_city",
+    "source_table": "silver.silver_city",
+    "pk_columns": [
+      "city_id"
+    ],
+    "fk_hints": {
+      "country_id": "silver_country"
+    },
+    "columns": [
+      {
+        "name": "city_id",
+        "data_type": "integer",
+        "nullable": false,
+        "is_pk": true,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "city",
+        "data_type": "varchar",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "country_id",
+        "data_type": "integer",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": true,
+        "fk_table": "silver_country",
+        "fk_column": "country_id"
+      },
+      {
+        "name": "last_update",
+        "data_type": "timestamp",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      }
+    ]
+  },
+  {
+    "name": "silver_country",
+    "source_table": "silver.silver_country",
+    "pk_columns": [
+      "country_id"
+    ],
+    "fk_hints": {},
+    "columns": [
+      {
+        "name": "country_id",
+        "data_type": "integer",
+        "nullable": false,
+        "is_pk": true,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "country",
+        "data_type": "varchar",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "last_update",
+        "data_type": "timestamp",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      }
+    ]
+  },
+  {
+    "name": "silver_customer",
+    "source_table": "silver.silver_customer",
+    "pk_columns": [
+      "customer_id"
+    ],
+    "fk_hints": {
+      "store_id": "silver_store",
+      "address_id": "silver_address"
+    },
+    "columns": [
+      {
+        "name": "customer_id",
+        "data_type": "integer",
+        "nullable": false,
+        "is_pk": true,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "store_id",
+        "data_type": "integer",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": true,
+        "fk_table": "silver_store",
+        "fk_column": "store_id"
+      },
+      {
+        "name": "first_name",
+        "data_type": "varchar",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "last_name",
+        "data_type": "varchar",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "email",
+        "data_type": "varchar",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "address_id",
+        "data_type": "integer",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": true,
+        "fk_table": "silver_address",
+        "fk_column": "address_id"
+      },
+      {
+        "name": "activebool",
+        "data_type": "boolean",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "create_date",
+        "data_type": "timestamp",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "last_update",
+        "data_type": "timestamp",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "active",
+        "data_type": "boolean",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      }
+    ]
+  },
+  {
+    "name": "silver_film",
+    "source_table": "silver.silver_film",
+    "pk_columns": [
+      "film_id"
+    ],
+    "fk_hints": {
+      "language_id": "silver_language"
+    },
+    "columns": [
+      {
+        "name": "film_id",
+        "data_type": "integer",
+        "nullable": false,
+        "is_pk": true,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "title",
+        "data_type": "varchar",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "description",
+        "data_type": "varchar",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "release_year",
+        "data_type": "varchar",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "language_id",
+        "data_type": "integer",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": true,
+        "fk_table": "silver_language",
+        "fk_column": "language_id"
+      },
+      {
+        "name": "rental_duration",
+        "data_type": "varchar",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "rental_rate",
+        "data_type": "numeric",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "length",
+        "data_type": "varchar",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "replacement_cost",
+        "data_type": "numeric",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "rating",
+        "data_type": "varchar",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "last_update",
+        "data_type": "timestamp",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "special_features",
+        "data_type": "varchar",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "fulltext",
+        "data_type": "varchar",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      }
+    ]
+  },
+  {
+    "name": "silver_film_actor",
+    "source_table": "silver.silver_film_actor",
+    "pk_columns": [
+      "film_id",
+      "actor_id"
+    ],
+    "fk_hints": {
+      "film_id": "silver_film",
+      "actor_id": "silver_actor"
+    },
+    "columns": [
+      {
+        "name": "actor_id",
+        "data_type": "integer",
+        "nullable": false,
+        "is_pk": true,
+        "is_fk": true,
+        "fk_table": "silver_actor",
+        "fk_column": "actor_id"
+      },
+      {
+        "name": "film_id",
+        "data_type": "integer",
+        "nullable": false,
+        "is_pk": true,
+        "is_fk": true,
+        "fk_table": "silver_film",
+        "fk_column": "film_id"
+      },
+      {
+        "name": "last_update",
+        "data_type": "timestamp",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      }
+    ]
+  },
+  {
+    "name": "silver_film_category",
+    "source_table": "silver.silver_film_category",
+    "pk_columns": [
+      "film_id",
+      "category_id"
+    ],
+    "fk_hints": {
+      "film_id": "silver_film",
+      "category_id": "silver_category"
+    },
+    "columns": [
+      {
+        "name": "film_id",
+        "data_type": "integer",
+        "nullable": false,
+        "is_pk": true,
+        "is_fk": true,
+        "fk_table": "silver_film",
+        "fk_column": "film_id"
+      },
+      {
+        "name": "category_id",
+        "data_type": "integer",
+        "nullable": false,
+        "is_pk": true,
+        "is_fk": true,
+        "fk_table": "silver_category",
+        "fk_column": "category_id"
+      },
+      {
+        "name": "last_update",
+        "data_type": "timestamp",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      }
+    ]
+  },
+  {
+    "name": "silver_inventory",
+    "source_table": "silver.silver_inventory",
+    "pk_columns": [
+      "inventory_id"
+    ],
+    "fk_hints": {
+      "film_id": "silver_film",
+      "store_id": "silver_store"
+    },
+    "columns": [
+      {
+        "name": "inventory_id",
+        "data_type": "integer",
+        "nullable": false,
+        "is_pk": true,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "film_id",
+        "data_type": "integer",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": true,
+        "fk_table": "silver_film",
+        "fk_column": "film_id"
+      },
+      {
+        "name": "store_id",
+        "data_type": "integer",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": true,
+        "fk_table": "silver_store",
+        "fk_column": "store_id"
+      },
+      {
+        "name": "last_update",
+        "data_type": "timestamp",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      }
+    ]
+  },
+  {
+    "name": "silver_language",
+    "source_table": "silver.silver_language",
+    "pk_columns": [
+      "language_id"
+    ],
+    "fk_hints": {},
+    "columns": [
+      {
+        "name": "language_id",
+        "data_type": "integer",
+        "nullable": false,
+        "is_pk": true,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "name",
+        "data_type": "varchar",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "last_update",
+        "data_type": "timestamp",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      }
+    ]
+  },
+  {
+    "name": "silver_payment",
+    "source_table": "silver.silver_payment",
+    "pk_columns": [
+      "payment_id"
+    ],
+    "fk_hints": {
+      "customer_id": "silver_customer",
+      "staff_id": "silver_staff",
+      "rental_id": "silver_rental"
+    },
+    "columns": [
+      {
+        "name": "payment_id",
+        "data_type": "integer",
+        "nullable": false,
+        "is_pk": true,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "customer_id",
+        "data_type": "integer",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": true,
+        "fk_table": "silver_customer",
+        "fk_column": "customer_id"
+      },
+      {
+        "name": "staff_id",
+        "data_type": "integer",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": true,
+        "fk_table": "silver_staff",
+        "fk_column": "staff_id"
+      },
+      {
+        "name": "rental_id",
+        "data_type": "integer",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": true,
+        "fk_table": "silver_rental",
+        "fk_column": "rental_id"
+      },
+      {
+        "name": "amount",
+        "data_type": "numeric",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "payment_date",
+        "data_type": "timestamp",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      }
+    ]
+  },
+  {
+    "name": "silver_rental",
+    "source_table": "silver.silver_rental",
+    "pk_columns": [
+      "rental_id"
+    ],
+    "fk_hints": {
+      "inventory_id": "silver_inventory",
+      "customer_id": "silver_customer",
+      "staff_id": "silver_staff"
+    },
+    "columns": [
+      {
+        "name": "rental_id",
+        "data_type": "integer",
+        "nullable": false,
+        "is_pk": true,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "rental_date",
+        "data_type": "timestamp",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "inventory_id",
+        "data_type": "integer",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": true,
+        "fk_table": "silver_inventory",
+        "fk_column": "inventory_id"
+      },
+      {
+        "name": "customer_id",
+        "data_type": "integer",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": true,
+        "fk_table": "silver_customer",
+        "fk_column": "customer_id"
+      },
+      {
+        "name": "return_date",
+        "data_type": "timestamp",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "staff_id",
+        "data_type": "integer",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": true,
+        "fk_table": "silver_staff",
+        "fk_column": "staff_id"
+      },
+      {
+        "name": "last_update",
+        "data_type": "timestamp",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      }
+    ]
+  },
+  {
+    "name": "silver_staff",
+    "source_table": "silver.silver_staff",
+    "pk_columns": [
+      "staff_id"
+    ],
+    "fk_hints": {
+      "address_id": "silver_address",
+      "store_id": "silver_store"
+    },
+    "columns": [
+      {
+        "name": "staff_id",
+        "data_type": "integer",
+        "nullable": false,
+        "is_pk": true,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "first_name",
+        "data_type": "varchar",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "last_name",
+        "data_type": "varchar",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "address_id",
+        "data_type": "integer",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": true,
+        "fk_table": "silver_address",
+        "fk_column": "address_id"
+      },
+      {
+        "name": "email",
+        "data_type": "varchar",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "store_id",
+        "data_type": "integer",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": true,
+        "fk_table": "silver_store",
+        "fk_column": "store_id"
+      },
+      {
+        "name": "active",
+        "data_type": "boolean",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "username",
+        "data_type": "varchar",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "last_update",
+        "data_type": "timestamp",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      }
+    ]
+  },
+  {
+    "name": "silver_store",
+    "source_table": "silver.silver_store",
+    "pk_columns": [
+      "store_id"
+    ],
+    "fk_hints": {
+      "manager_staff_id": "silver_staff",
+      "address_id": "silver_address"
+    },
+    "columns": [
+      {
+        "name": "store_id",
+        "data_type": "integer",
+        "nullable": false,
+        "is_pk": true,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      },
+      {
+        "name": "manager_staff_id",
+        "data_type": "integer",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": true,
+        "fk_table": "silver_staff",
+        "fk_column": "manager_staff_id"
+      },
+      {
+        "name": "address_id",
+        "data_type": "integer",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": true,
+        "fk_table": "silver_address",
+        "fk_column": "address_id"
+      },
+      {
+        "name": "last_update",
+        "data_type": "timestamp",
+        "nullable": true,
+        "is_pk": false,
+        "is_fk": false,
+        "fk_table": null,
+        "fk_column": null
+      }
+    ]
+  }
+]

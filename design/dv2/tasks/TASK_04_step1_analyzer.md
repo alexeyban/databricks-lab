@@ -126,10 +126,29 @@ class SchemaAnalyzer:
 | silver_rental | staff_id | silver_staff |
 | silver_payment | rental_id | silver_rental |
 
+## Type inference (`_infer_type_from_mapping`)
+
+Types are resolved in priority order:
+
+1. Explicit `data_type` field in the field mapping → normalised via `_norm_type()`
+2. `transform` field:
+   - `decimal_from_debezium_bytes` / `decimal_from_json_paths` → `"numeric"`
+   - `epoch_micros_to_timestamp` / `epoch_millis_to_timestamp` → `"timestamp"`
+3. Column-name heuristics (applied if no transform matched):
+   - `col.endswith("_id")` or `col == "id"` → `"integer"`
+   - `col in {"active", "activebool", "enabled", "flag"}` → `"boolean"`
+   - `"date" in col` or `"time" in col` or `col.endswith("_at")` → `"timestamp"`
+   - default → `"varchar"`
+
+> **Note:** The timestamp heuristic uses `col.endswith("_at")` — not `"at" in col`. The broader substring match was too aggressive and incorrectly classified `rating`, `rental_duration`, and `special_features` as timestamps.
+
 ## Acceptance criteria
 - Running on the dvdrental Silver configs produces exactly 15 `TableDef` entries
 - Each `TableDef` has a non-empty `pk_columns` list
 - `silver_rental` has `fk_hints` containing `inventory_id`, `customer_id`, `staff_id`
 - `silver_film` has `fk_hints` containing `language_id`
+- `silver_film.rental_rate` infers type `"numeric"` (via `decimal_from_debezium_bytes` transform)
+- `silver_customer.activebool` infers type `"boolean"` (column-name heuristic)
+- `silver_film.rating` infers type `"varchar"` (not timestamp — `"at" in col` is NOT the rule)
 - Re-running after `session.mark_step_done("step1_analyzer")` loads from cache without re-parsing files
 - `01_schema_analysis.json` is valid JSON and round-trips through `_load_cached()` without data loss

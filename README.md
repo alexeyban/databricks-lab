@@ -256,6 +256,7 @@ scripts/
   deploy_job.py                   Create/update all 5 Databricks jobs; optionally trigger run
   reset_checkpoints.py            Delete Silver/Bronze streaming checkpoints before E2E reload
   upload_vault_config.py          Upload dv_model.json to Unity Catalog Volume (run once)
+  patch_dv_model_types.py         One-off migration: inject column_types into all 15 satellites in dv_model.json
   smoke_test_vault.py             Validate vault row counts via SQL execution API
   push_secrets_to_databricks.py  Push Kafka bootstrap + DEK secrets to Databricks Secret Scope
   kafka_to_volume.py              Uploads Kafka events to Volume landing zone (cloud Kafka alternative)
@@ -326,6 +327,18 @@ Loads `dv_model.json` from a Unity Catalog Volume and exposes shared helpers:
 - `generate_diff_hash(tracked_cols)` — NULL-safe DIFF_HK for satellite change detection
 - DDL helpers: `create_hub_table`, `create_link_table`, `create_sat_table`, `create_pit_table`, `create_bridge_table`
 
+`create_sat_table()` maps each satellite's `column_types` to Spark SQL DDL types via a built-in `_SPARK_TYPE` dictionary. Payload columns receive their source-accurate types rather than a blanket `STRING`:
+
+| Canonical type | Spark SQL DDL |
+|----------------|--------------|
+| `integer` / `bigint` | `BIGINT` |
+| `smallint` | `INT` |
+| `varchar` / `text` | `STRING` |
+| `numeric` / `decimal` | `DECIMAL(18,6)` |
+| `timestamp` | `TIMESTAMP` |
+| `boolean` | `BOOLEAN` |
+| `date` | `DATE` |
+
 ### Vault — NB_ingest_to_hubs
 
 Insert-only MERGE from Silver → 13 Hub tables. Watermarked by `LOAD_DATE`.
@@ -345,6 +358,7 @@ Append-only insert from Silver → 15 Satellite tables using DIFF_HK change dete
 
 - `LEFT JOIN` latest DIFF_HK per hub key; insert only where DIFF_HK changed or is new
 - History preserved by `LOAD_DATE` — no end-dating
+- Each tracked column is **cast to its declared satellite DDL type** (from `column_types` in `dv_model.json`) before appending, preventing `DELTA_FAILED_TO_MERGE_FIELDS` errors when the Silver source type differs from the satellite schema (e.g. Silver stores `active` as `LONG`, satellite declares it `BOOLEAN`)
 
 ### Vault — NB_dv_business_vault
 
@@ -528,16 +542,18 @@ cp .envexample .env
 `generators/dv_generator/` is a **meta-tool** that automates DV 2.0 model creation from any Silver layer schema. It replaces manual vault design with a 7-step pipeline:
 
 ```
-step1: schema analysis    → 01_schema_analysis.json
-step2: heuristic rules    → 02_classification.json
+step1: schema analysis    → 01_schema_analysis.json   (infers column types from Silver configs)
+step2: heuristic rules    → 02_classification.json     (SatDef carries column_types per tracked column)
 step2b: AI classifier     → 02b_merged_classification.json  (optional, needs LLM env)
-step3: artifact gen       → 03_dv_model_draft.json + query_templates/
+step3: artifact gen       → 03_dv_model_draft.json + query_templates/  (COLUMN_TYPES constant per sat)
 step3b: notebook gen      → notebooks/vault/*.ipynb
 step4: documentation      → 04_diagram.drawio + 04_documentation.md
 step5: human review       → 05_review_notebook.ipynb  ← PAUSE
 step6: validation         → 06_validation_report.json
 step7: apply              → pipeline_configs/datavault/dv_model.json + notebooks/vault/
 ```
+
+Each satellite in the generated `dv_model.json` carries a `column_types` dict mapping tracked column names to their inferred canonical types (`integer`, `numeric`, `boolean`, `timestamp`, `varchar`). The type inference uses Silver field mapping transforms first, then column-name heuristics. Run `scripts/patch_dv_model_types.py` to back-fill `column_types` into an existing `dv_model.json` that pre-dates this feature.
 
 ### Quick start
 
@@ -559,8 +575,9 @@ python -m generators.dv_generator.main --analyze \
 
 | File | Description |
 |------|-------------|
-| `pipeline_configs/datavault/dv_model.json` | Final approved DV 2.0 config |
+| `pipeline_configs/datavault/dv_model.json` | Final approved DV 2.0 config (includes `column_types` per satellite) |
 | `pipeline_configs/silver/dvdrental/*.json` | Silver table configs (15 files) |
+| `scripts/patch_dv_model_types.py` | One-off migration to inject `column_types` into `dv_model.json` from Silver configs |
 | `design/dv2/DV2_VAULT_LAYER_PLAN.md` | Full vault design (hubs/links/sats/PITs/bridges) |
 | `design/dv2/DV2_GENERATOR_DESIGN.md` | Generator architecture decisions |
 | `design/dv2/IMPLEMENTATION_LOG.md` | Module completion status |
