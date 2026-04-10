@@ -15,13 +15,28 @@ Current state of the project and prioritised next steps.
 | Schema drift detection + alerting (strict / additive_only / permissive) | Done |
 | DV 2.0 vault layer design (13 hubs, 19 links, 15 sats, 4 PITs, 2 bridges) | Done |
 | DV 2.0 generator (14-module CLI tool — analyze → review → validate → apply) | Done |
+| DV 2.0 type propagation — `column_types` in `SatDef` + `dv_model.json`; satellite DDL uses source-accurate Spark types (`DECIMAL`, `BOOLEAN`, `TIMESTAMP`); Silver→satellite casting | Done |
 | Vault notebooks generated and committed (`notebooks/vault/`) | Done |
 | `pipeline_configs/datavault/dv_model.json` — approved DV 2.0 config | Done |
 | Vault notebooks wired into `dvdrental-vault` Databricks job | Done |
-| 4-job architecture (Bronze / Silver / Vault / Orchestrator) via `deploy_job.py` | Done |
+| 5-job architecture (Bronze / Silver / Vault / Orchestrator / DQ-GDPR) via `deploy_job.py` | Done |
 | dbt Gold layer (gold_film, gold_rental — models + data quality tests) | Done |
 | Data generators (rental/payment inserts, film attribute updates) | Done |
-| DV 2.0 type propagation — `column_types` in `SatDef` + `dv_model.json`; satellite DDL uses source-accurate Spark types (`DECIMAL`, `BOOLEAN`, `TIMESTAMP`) instead of `STRING`; Silver→satellite type casting in ingestion notebook | Done |
+| Docker operational profiles (dbt-gold, generate-cdc-traffic, deploy-databricks-jobs, upload-vault-config, kafka-to-volume) | Done |
+| PII inventory config (`pipeline_configs/pii/pii_config.json`) + Unity Catalog column tagging | Done |
+| DQ monitoring table (`monitoring.dq_results`) + `write_dq_result()` helper | Done |
+| AES-256-GCM key management (`NB_key_management_helpers`) + `monitoring.subject_key_store` | Done |
+| Silver PII encryption (per-subject DEKs in `NB_process_to_silver_generic`) | Done |
+| Silver DQ assertions (PK uniqueness, FK null rate, payment amount range) | Done |
+| Bronze quarantine table + envelope validation | Done |
+| GDPR erasure tables (`erasure_requests`, `erasure_registry`, `erasure_audit_log`) | Done |
+| Vault DQ integrity checks (Hub HK uniqueness, Link FK presence, Satellite orphan check) | Done |
+| Gold dbt test expansion (dbt_expectations, payment reconciliation, `suppress_erased_subjects` macro) | Done |
+| GDPR erasure pipeline — 6-step `NB_process_erasure` (suppress → shred → delete Bronze → validate → complete) | Done |
+| `dvdrental-dq-gdpr` job (daily VACUUM, erasure processing, SLA checks) | Done |
+| DQ + GDPR runbooks (`design/runbooks/DQ_INCIDENT_RUNBOOK.md`, `ERASURE_SOP.md`) | Done |
+| Confluence documentation generator (`runtime/confluence_doc_generator.py`) | Done |
+| Agent system: 24 specialized agents + 24 skills | Done |
 
 ---
 
@@ -35,7 +50,7 @@ Serverless cannot reach the local ngrok Kafka endpoint.
 **Options:**
 - Use a cloud Kafka (Confluent Cloud free tier, MSK, or similar) reachable from Databricks
 - Run a Databricks cluster (not Serverless) that can access ngrok
-- Manually produce Kafka records for those tables using the Debezium REST API snapshot
+- Use the `kafka-to-volume` Docker profile to upload CDC events via the Volume landing zone
 
 **Acceptance:** All 15 `workspace.bronze.*` tables exist with non-zero row counts.
 
@@ -94,10 +109,11 @@ its use for any new CDC source.
 
 ---
 
-### 6. Data Quality + GDPR (future)
+### 6. DQ dashboards
 
-Detailed multi-phase plan in `dq_gdpr_todo.md`:
-- Phase 1: PII inventory + monitoring table
-- Phase 2: SQL-based DQ checks per Silver table
-- Phase 3: GDPR crypto-shredding (column-level encryption, subject deletion)
-- Phases 4–7: audit logs, dashboards, automated testing
+Phase 4 of `design/dq_gdpr/IMPLEMENTATION_PLAN.md`.
+
+**Tasks:**
+- Databricks SQL DQ dashboard (pass rate by layer 30d, recent failures, Bronze volume trend)
+- Databricks SQL GDPR SLA dashboard (open requests by age, completed erasures trend)
+- Export dashboard JSON to `design/dashboards/`

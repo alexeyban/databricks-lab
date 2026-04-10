@@ -132,15 +132,22 @@ python3 scripts/upload_vault_config.py
 ### 4. Upload PII Config
 
 ```bash
-# pii_config.json must be in the Volume alongside dv_model.json
-python3 scripts/upload_vault_config.py   # uploads dv_model.json
-# Then upload pii_config manually or add to upload script:
-# databricks fs cp pipeline_configs/pii/pii_config.json \
-#   dbfs:/Volumes/workspace/default/mnt/pipeline_configs/pii/pii_config.json
+# Upload pii_config.json to the Unity Catalog Volume alongside dv_model.json
+databricks fs cp pipeline_configs/pii/pii_config.json \
+  dbfs:/Volumes/workspace/default/mnt/pipeline_configs/pii/pii_config.json
 ```
 
-### 5. Deploy Databricks Jobs
+### 5. Deploy Databricks Jobs (via Docker or script)
 
+**Option A — Docker:**
+```bash
+# Pushes secrets to Databricks scope 'dvdrental' and deploys all 5 jobs
+docker compose --profile deploy-databricks-jobs run --rm deploy-databricks-jobs
+
+# Pass extra flags via DEPLOY_ARGS in .env (e.g. DEPLOY_ARGS=--run)
+```
+
+**Option B — direct Python:**
 ```bash
 set -a && source .env && set +a
 
@@ -166,6 +173,14 @@ This creates/updates five Databricks jobs:
 
 ### 6. Generate CDC Traffic
 
+**Option A — Docker (recommended):**
+```bash
+docker compose --profile generate-cdc-traffic up -d generate-cdc-traffic
+# Stop:
+docker compose stop generate-cdc-traffic
+```
+
+**Option B — direct Python:**
 ```bash
 # Film updates (rental_rate, rental_duration, replacement_cost)
 python3 generators/load_products_generator.py
@@ -205,6 +220,20 @@ After editing notebook JSON directly, normalize formatting:
 ```bash
 python3 runtime/normalize_notebooks.py <notebook> [<notebook> ...]
 ```
+
+## Docker Profiles
+
+All `docker-compose.yml` services beyond the core CDC stack use the `manual` profile and must be started explicitly:
+
+| Profile | Service | What it does |
+|---------|---------|-------------|
+| `generate-cdc-traffic` | `generate-cdc-traffic` | Runs both data generators (film updates + rental/payment) in parallel against `postgres` |
+| `dbt-gold` | `dbt-gold` | Runs `dbt deps → dbt debug → dbt build → dbt test` against Databricks (requires `DATABRICKS_WAREHOUSE_ID`) |
+| `deploy-databricks-jobs` | `deploy-databricks-jobs` | Pushes Kafka secrets + deploys all 5 Databricks jobs via `deploy_job.py` |
+| `upload-vault-config` | `upload-vault-config` | Uploads `dv_model.json` to the Unity Catalog Volume (run once before vault) |
+| `kafka-to-volume` | `kafka-to-volume` | Consumes Kafka topics and uploads CDC events to a Volume landing zone (no ngrok required) |
+
+All profiles require `.env` to be populated.
 
 ## Repository Layout
 
@@ -509,22 +538,28 @@ python3 scripts/reset_checkpoints.py --checkpoint-suffix v8 --run
 
 ## ngrok for Local Development
 
-Databricks Serverless cannot reach a local Kafka directly. Use the built-in skill to
-set up an ngrok TCP tunnel and push the bootstrap address to Databricks secrets:
+Databricks Serverless cannot reach a local Kafka directly. Use ngrok to expose the local
+Kafka port, then push the bootstrap address to Databricks secrets:
 
 ```bash
-# Sets up ngrok tunnel, updates .env, pushes secrets, and redeploys Bronze job
-bash .claude/skills/ngrok-kafka-setup/scripts/setup_ngrok_kafka.sh
+# Start an ngrok TCP tunnel on port 9092
+ngrok tcp 9092
+
+# Copy the public host/port into .env:
+#   KAFKA_EXTERNAL_HOST=0.tcp.ngrok.io
+#   KAFKA_EXTERNAL_PORT=12345
+
+# Push secrets to Databricks and redeploy Bronze job
+set -a && source .env && set +a
+python3 scripts/push_secrets_to_databricks.py
+python3 scripts/deploy_job.py
 ```
 
 The Bronze notebook reads `kafka-external-host` and `kafka-external-port` from the
 `dvdrental` Databricks secret scope at runtime — no bootstrap address in job parameters.
 
-To push updated secrets manually:
-```bash
-set -a && source .env && set +a
-python3 scripts/push_secrets_to_databricks.py
-```
+**Alternative (no ngrok):** Use the `kafka-to-volume` Docker profile to upload CDC events
+to a Databricks Volume landing zone — no public tunnel required.
 
 ## Secret Hygiene
 
