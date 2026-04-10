@@ -272,6 +272,7 @@ DIFF_HASH_EXPR = F.sha2(
 HUB_KEY_EXPR = {hub_hash}.alias("HK_{sat.parent_hub[4:]}")
 
 TRACKED_COLUMNS = {sat.tracked_columns!r}
+COLUMN_TYPES    = {sat.column_types!r}
 LOAD_DATE_COL   = {sat.load_date_column!r}
 RECORD_SOURCE   = {sat.record_source!r}
 TARGET_TABLE    = {sat.target_table!r}
