@@ -97,6 +97,7 @@ class SatDef:
     source_table: str
     hub_key_source_column: str             # PK column in source that maps to hub BK
     tracked_columns: list[str] = field(default_factory=list)
+    column_types: dict[str, str] = field(default_factory=dict)  # col name → canonical type
     load_date_column: str = "last_updated_dt"
     record_source: str = ""
     split_reason: Optional[str] = None    # why this sat was split from another

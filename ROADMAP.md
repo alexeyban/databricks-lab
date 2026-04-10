@@ -21,6 +21,7 @@ Current state of the project and prioritised next steps.
 | 4-job architecture (Bronze / Silver / Vault / Orchestrator) via `deploy_job.py` | Done |
 | dbt Gold layer (gold_film, gold_rental — models + data quality tests) | Done |
 | Data generators (rental/payment inserts, film attribute updates) | Done |
+| DV 2.0 type propagation — `column_types` in `SatDef` + `dv_model.json`; satellite DDL uses source-accurate Spark types (`DECIMAL`, `BOOLEAN`, `TIMESTAMP`) instead of `STRING`; Silver→satellite type casting in ingestion notebook | Done |
 
 ---
 

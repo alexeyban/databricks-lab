@@ -95,6 +95,7 @@ class SatDef:
     source_table: str
     hub_key_source_column: str          # PK column in source that maps to hub BK
     tracked_columns: list[str]          # payload columns to DIFF_HASH
+    column_types: dict[str, str]        # col name → canonical type ("integer", "numeric", "boolean", "timestamp", "varchar")
     load_date_column: str
     record_source: str
     split_reason: Optional[str] = None  # why this sat was split from another

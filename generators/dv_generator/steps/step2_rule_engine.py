@@ -228,6 +228,9 @@ class RuleEngine:
         hub_name = self._hub_name(table.name)
         bk_col = table.pk_columns[0] if table.pk_columns else ""
 
+        # Build type map for all columns in this table
+        col_type_map: dict[str, str] = {col.name: col.data_type for col in table.columns}
+
         # Collect payload columns (non-PK, non-FK, non-audit)
         pk_set = set(table.pk_columns)
         fk_set = set(table.fk_hints.keys())
@@ -271,6 +274,7 @@ class RuleEngine:
                     source_table=table.source_table,
                     hub_key_source_column=bk_col,
                     tracked_columns=cols,
+                    column_types={c: col_type_map.get(c, "varchar") for c in cols},
                     load_date_column=self._load_date_col(table),
                     record_source=f"cdc.dvdrental.{table.name.replace('silver_', '')}",
                     split_reason=reason,
@@ -295,6 +299,7 @@ class RuleEngine:
                     source_table=table.source_table,
                     hub_key_source_column=bk_col,
                     tracked_columns=audit,
+                    column_types={c: col_type_map.get(c, "varchar") for c in audit},
                     load_date_column=self._load_date_col(table),
                     record_source=f"cdc.dvdrental.{table.name.replace('silver_', '')}",
                     split_reason="S4: marker satellite (audit columns only)",
@@ -441,6 +446,7 @@ def _model_from_dict(d: dict) -> DVModel:
             parent_hub=s["parent_hub"], source_table=s["source_table"],
             hub_key_source_column=s["hub_key_source_column"],
             tracked_columns=s["tracked_columns"],
+            column_types=s.get("column_types", {}),
             load_date_column=s["load_date_column"],
             record_source=s["record_source"],
             split_reason=s.get("split_reason"),
