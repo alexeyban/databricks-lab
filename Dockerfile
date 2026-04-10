@@ -9,6 +9,10 @@ ARG REQUIREMENTS_FILE=requirements.txt
 # INSTALL_GIT — set to "true" for dbt-gold (dbt debug checks for git).
 ARG INSTALL_GIT=false
 
+# Disable Python stdout/stderr buffering so all print() output appears in
+# docker logs immediately without waiting for the buffer to fill.
+ENV PYTHONUNBUFFERED=1
+
 WORKDIR /app
 
 RUN if [ "$INSTALL_GIT" = "true" ]; then \

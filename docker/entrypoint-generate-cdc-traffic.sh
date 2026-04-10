@@ -18,10 +18,23 @@ do
 done
 
 echo "PostgreSQL ready. Starting generators in parallel..."
-python3 generators/load_products_generator.py &
+
+# Each generator's stdout/stderr is prefixed with its name so lines from both
+# processes are distinguishable in `docker compose logs generate-cdc-traffic`.
+python3 -u generators/load_products_generator.py 2>&1 | python3 -u -c "
+import sys
+for line in sys.stdin:
+    sys.stdout.write('[products] ' + line)
+    sys.stdout.flush()
+" &
 PID_PRODUCTS=$!
 
-python3 generators/load_generator.py &
+python3 -u generators/load_generator.py 2>&1 | python3 -u -c "
+import sys
+for line in sys.stdin:
+    sys.stdout.write('[rentals]  ' + line)
+    sys.stdout.flush()
+" &
 PID_RENTALS=$!
 
 echo "  load_products_generator PID=$PID_PRODUCTS"
