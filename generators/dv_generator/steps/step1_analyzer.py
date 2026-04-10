@@ -212,7 +212,7 @@ def _infer_type_from_mapping(fm: dict) -> str:
         return "integer"
     if col_name in {"active", "activebool", "enabled", "flag"}:
         return "boolean"
-    if "date" in col_name or "time" in col_name or "at" in col_name:
+    if "date" in col_name or "time" in col_name or col_name.endswith("_at"):
         return "timestamp"
     return "varchar"
 
