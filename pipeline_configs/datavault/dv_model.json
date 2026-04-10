@@ -747,6 +747,10 @@
       "column_descriptions": {
         "first_name": "Tracked attribute from silver_actor (varchar)",
         "last_name": "Tracked attribute from silver_actor (varchar)"
+      },
+      "column_types": {
+        "first_name": "varchar",
+        "last_name": "varchar"
       }
     },
     {
@@ -777,6 +781,13 @@
         "district": "Tracked attribute from silver_address (varchar)",
         "postal_code": "Tracked attribute from silver_address (varchar)",
         "phone": "Tracked attribute from silver_address (varchar)"
+      },
+      "column_types": {
+        "address": "varchar",
+        "address2": "varchar",
+        "district": "varchar",
+        "postal_code": "varchar",
+        "phone": "varchar"
       }
     },
     {
@@ -799,6 +810,9 @@
       "description": "Satellite for HUB_CATEGORY tracking all descriptive payload columns. Tracked columns: name. Source: silver.silver_category.",
       "column_descriptions": {
         "name": "Tracked attribute from silver_category (varchar)"
+      },
+      "column_types": {
+        "name": "varchar"
       }
     },
     {
@@ -821,6 +835,9 @@
       "description": "Satellite for HUB_CITY tracking all descriptive payload columns. Tracked columns: city. Source: silver.silver_city.",
       "column_descriptions": {
         "city": "Tracked attribute from silver_city (varchar)"
+      },
+      "column_types": {
+        "city": "varchar"
       }
     },
     {
@@ -843,6 +860,9 @@
       "description": "Satellite for HUB_COUNTRY tracking all descriptive payload columns. Tracked columns: country. Source: silver.silver_country.",
       "column_descriptions": {
         "country": "Tracked attribute from silver_country (varchar)"
+      },
+      "column_types": {
+        "country": "varchar"
       }
     },
     {
@@ -873,6 +893,13 @@
         "email": "Tracked attribute from silver_customer (varchar)",
         "activebool": "Tracked attribute from silver_customer (boolean)",
         "active": "Tracked attribute from silver_customer (boolean)"
+      },
+      "column_types": {
+        "first_name": "varchar",
+        "last_name": "varchar",
+        "email": "varchar",
+        "activebool": "boolean",
+        "active": "boolean"
       }
     },
     {
@@ -905,6 +932,13 @@
         "rating": "Tracked attribute from silver_film (timestamp)",
         "special_features": "Tracked attribute from silver_film (timestamp)",
         "fulltext": "Tracked attribute from silver_film (varchar)"
+      },
+      "column_types": {
+        "title": "varchar",
+        "description": "varchar",
+        "release_year": "varchar",
+        "length": "varchar",
+        "rating": "varchar"
       }
     },
     {
@@ -931,6 +965,11 @@
         "rental_duration": "Tracked attribute from silver_film (timestamp)",
         "rental_rate": "Tracked attribute from silver_film (numeric)",
         "replacement_cost": "Tracked attribute from silver_film (numeric)"
+      },
+      "column_types": {
+        "rental_duration": "varchar",
+        "rental_rate": "numeric",
+        "replacement_cost": "numeric"
       }
     },
     {
@@ -953,6 +992,9 @@
       "description": "Satellite for HUB_INVENTORY tracking audit marker (tracks existence and timestamps). Tracked columns: last_update. Source: silver.silver_inventory.",
       "column_descriptions": {
         "last_update": "Tracked attribute from silver_inventory (timestamp)"
+      },
+      "column_types": {
+        "last_update": "timestamp"
       }
     },
     {
@@ -975,6 +1017,9 @@
       "description": "Satellite for HUB_LANGUAGE tracking all descriptive payload columns. Tracked columns: name. Source: silver.silver_language.",
       "column_descriptions": {
         "name": "Tracked attribute from silver_language (varchar)"
+      },
+      "column_types": {
+        "name": "varchar"
       }
     },
     {
@@ -997,6 +1042,9 @@
       "description": "Satellite for HUB_PAYMENT tracking core descriptive attributes (split from pricing). Tracked columns: payment_date. Source: silver.silver_payment.",
       "column_descriptions": {
         "payment_date": "Tracked attribute from silver_payment (timestamp)"
+      },
+      "column_types": {
+        "payment_date": "timestamp"
       }
     },
     {
@@ -1019,6 +1067,9 @@
       "description": "Satellite for HUB_PAYMENT tracking pricing / financial attributes (split from core). Tracked columns: amount. Source: silver.silver_payment.",
       "column_descriptions": {
         "amount": "Tracked attribute from silver_payment (numeric)"
+      },
+      "column_types": {
+        "amount": "numeric"
       }
     },
     {
@@ -1043,6 +1094,10 @@
       "column_descriptions": {
         "rental_date": "Tracked attribute from silver_rental (timestamp)",
         "return_date": "Tracked attribute from silver_rental (timestamp)"
+      },
+      "column_types": {
+        "rental_date": "timestamp",
+        "return_date": "timestamp"
       }
     },
     {
@@ -1073,6 +1128,13 @@
         "email": "Tracked attribute from silver_staff (varchar)",
         "username": "Tracked attribute from silver_staff (varchar)",
         "active": "Tracked attribute from silver_staff (boolean)"
+      },
+      "column_types": {
+        "first_name": "varchar",
+        "last_name": "varchar",
+        "email": "varchar",
+        "username": "varchar",
+        "active": "boolean"
       }
     },
     {
@@ -1095,6 +1157,9 @@
       "description": "Satellite for HUB_STORE tracking audit marker (tracks existence and timestamps). Tracked columns: last_update. Source: silver.silver_store.",
       "column_descriptions": {
         "last_update": "Tracked attribute from silver_store (timestamp)"
+      },
+      "column_types": {
+        "last_update": "timestamp"
       }
     }
   ],
