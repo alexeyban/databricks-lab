@@ -173,6 +173,7 @@ services:
       KAFKA_BOOTSTRAP: kafka:9092
       DATABRICKS_HOST: ${DATABRICKS_HOST}
       DATABRICKS_TOKEN: ${DATABRICKS_TOKEN}
+      PYTHONUNBUFFERED: "1"
     volumes:
       - ./scripts:/app/scripts:ro
     working_dir: /app
