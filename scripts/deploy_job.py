@@ -150,18 +150,22 @@ def build_silver_job(checkpoint_root: str, full_reload: bool = False) -> JobSett
     return _base_settings("dvdrental-silver", tasks)
 
 
-def build_vault_job() -> JobSettings:
+def build_vault_job(full_reload: bool = False) -> JobSettings:
+    reload_param = "true" if full_reload else "false"
     tasks = [
         _task("vault_Ingest_Hubs",
               "notebooks/vault/NB_ingest_to_hubs",
-              {"CATALOG": CATALOG, "VAULT_SCHEMA": "vault", "MODEL_PATH": MODEL_PATH}),
+              {"CATALOG": CATALOG, "VAULT_SCHEMA": "vault", "MODEL_PATH": MODEL_PATH,
+               "FULL_RELOAD": reload_param}),
         _task("vault_Ingest_Links",
               "notebooks/vault/NB_ingest_to_links",
-              {"CATALOG": CATALOG, "VAULT_SCHEMA": "vault", "MODEL_PATH": MODEL_PATH},
+              {"CATALOG": CATALOG, "VAULT_SCHEMA": "vault", "MODEL_PATH": MODEL_PATH,
+               "FULL_RELOAD": reload_param},
               depends_on=["vault_Ingest_Hubs"]),
         _task("vault_Ingest_Satellites",
               "notebooks/vault/NB_ingest_to_satellites",
-              {"CATALOG": CATALOG, "VAULT_SCHEMA": "vault", "MODEL_PATH": MODEL_PATH},
+              {"CATALOG": CATALOG, "VAULT_SCHEMA": "vault", "MODEL_PATH": MODEL_PATH,
+               "FULL_RELOAD": reload_param},
               depends_on=["vault_Ingest_Hubs"]),
         _task("vault_Business_Vault",
               "notebooks/vault/NB_dv_business_vault",
@@ -269,6 +273,9 @@ def main() -> None:
     parser.add_argument("--full-reload", action="store_true",
                         help="Deploy Silver job with FULL_RELOAD=true (batch mode, no checkpoint). "
                              "Use for E2E test resets after Bronze truncation.")
+    parser.add_argument("--full-reload-vault", action="store_true",
+                        help="Deploy Vault job with FULL_RELOAD=true: drops all hub/link/sat tables "
+                             "before reloading. Use after LOAD_DATE logic changes.")
     parser.add_argument("--run", action="store_true",
                         help="Trigger the orchestrator immediately after deploying")
     parser.add_argument("--webhook-url", default="",
@@ -291,7 +298,7 @@ def main() -> None:
     silver_id  = _upsert_job(w, "dvdrental-silver",
                              build_silver_job(checkpoint_root, full_reload=args.full_reload))
     vault_id   = _upsert_job(w, "dvdrental-vault",
-                             build_vault_job())
+                             build_vault_job(full_reload=args.full_reload_vault))
     orch_id    = _upsert_job(w, "dvdrental-orchestrator",
                              build_orchestrator_job(bronze_id, silver_id, vault_id))
     dq_gdpr_id = _upsert_job(w, "dvdrental-dq-gdpr",
