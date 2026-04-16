@@ -38,7 +38,7 @@ from databricks.sdk.service.jobs import (
 )
 
 GIT_URL = "https://github.com/alexeyban/databricks-lab"
-GIT_BRANCH = "main"
+GIT_BRANCH = "feature/vault-full-reload"
 CATALOG = "workspace"
 CHECKPOINT_ROOT = "/Volumes/workspace/default/mnt/checkpoints"
 LANDING_ROOT    = "/Volumes/workspace/default/mnt/bronze-landing"
