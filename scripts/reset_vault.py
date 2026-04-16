@@ -18,6 +18,17 @@ from databricks.sdk import WorkspaceClient
 
 MODEL_PATH = Path(__file__).parent.parent / "pipeline_configs/datavault/dv_model.json"
 
+# Tables from old model versions (ORDERS/PRODUCTS) no longer in dv_model.json.
+# Drop them explicitly so stale data doesn't remain in the vault schema.
+LEGACY_TABLES = [
+    "hub_orders",
+    "hub_products",
+    "lnk_orders_products",
+    "sat_orders_core",
+    "sat_orders_pricing",
+    "sat_products_core",
+]
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__,
@@ -35,7 +46,8 @@ def main() -> None:
         [l["name"].lower() for l in model["links"]] +
         [s["name"].lower() for s in model["satellites"]] +
         [p["name"].lower() for p in model.get("pit_tables", [])] +
-        [b["name"].lower() for b in model.get("bridge_tables", [])]
+        [b["name"].lower() for b in model.get("bridge_tables", [])] +
+        LEGACY_TABLES
     )
 
     print(f"Will drop {len(tables)} tables from {catalog}.{schema}:")
