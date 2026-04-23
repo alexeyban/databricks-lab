@@ -9,3 +9,6 @@ logs/
 docs/
 scripts/dvdrental.sql
 docker/data/**
+
+# Archived generator (static dv_model.json used instead)
+archive/

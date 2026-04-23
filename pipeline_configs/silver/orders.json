@@ -10,6 +10,9 @@
   "dedupe_order_columns": ["event_time", "event_ts_ms", "bronze_offset"],
   "merge_core_fields": ["id", "product_id", "product_legacy", "price", "created_at"],
   "bootstrap_hook": "reconcile_orders_legacy",
+  "fk_references": [
+    {"column": "product_id", "target_table": "silver_products"}
+  ],
   "field_mappings": [
     {
       "target": "id",
