@@ -1,0 +1,19 @@
+{
+  "table_id": "category",
+  "enabled": true,
+  "bronze_table": "category",
+  "silver_table": "silver_category",
+  "cdc_contract_key": "cdc.public.category",
+  "silver_contract_key": "silver.category",
+  "checkpoint_name": "category_silver_generic",
+  "primary_keys": ["category_id"],
+  "dedupe_order_columns": ["last_update", "event_ts_ms", "bronze_offset"],
+  "merge_core_fields": ["category_id", "name", "last_update"],
+  "fk_references": [],
+  "bootstrap_hook": null,
+  "field_mappings": [
+    {"target": "category_id", "source_paths": ["after.category_id", "before.category_id"]},
+    {"target": "name", "source_paths": ["after.name", "before.name"]},
+    {"target": "last_update", "transform": "epoch_micros_to_timestamp", "source_paths": ["after.last_update", "before.last_update"]}
+  ]
+}

@@ -349,7 +349,7 @@ def wait_for_connect(timeout_seconds: int = 90) -> None:
 
 
 def register_connector() -> str:
-    connector_config = (REPO_ROOT / "postgres-connector.json").read_bytes()
+    connector_config = (REPO_ROOT / "../../ingestion/cdc/postgres-connector.json").read_bytes()
     request = urllib.request.Request(
         CONNECT_URL,
         data=connector_config,
@@ -389,19 +389,19 @@ def start_docker_and_generate(
 
     print(f"  Running film generator ({film_iterations} iterations)…")
     run_cmd(
-        ["python3", "generators/load_products_generator.py"],
+        ["python3", "../../ingestion/load_products_generator.py"],
         env=os.environ.copy() | {"ITERATIONS": str(film_iterations)},
     )
 
     print(f"  Running rental/payment generator ({rental_iterations} iterations)…")
     run_cmd(
-        ["python3", "generators/load_generator.py"],
+        ["python3", "../../ingestion/load_generator.py"],
         env=os.environ.copy() | {"ITERATIONS": str(rental_iterations)},
     )
 
     print(f"  Running reference generator ({reference_iterations} iterations)…")
     run_cmd(
-        ["python3", "generators/load_reference_generator.py"],
+        ["python3", "../../ingestion/load_reference_generator.py"],
         env=os.environ.copy() | {"ITERATIONS": str(reference_iterations)},
     )
 

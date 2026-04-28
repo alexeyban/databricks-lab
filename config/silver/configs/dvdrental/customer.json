@@ -1,0 +1,29 @@
+{
+  "table_id": "customer",
+  "enabled": true,
+  "bronze_table": "customer",
+  "silver_table": "silver_customer",
+  "cdc_contract_key": "cdc.public.customer",
+  "silver_contract_key": "silver.customer",
+  "checkpoint_name": "customer_silver_generic",
+  "primary_keys": ["customer_id"],
+  "dedupe_order_columns": ["last_update", "event_ts_ms", "bronze_offset"],
+  "merge_core_fields": ["customer_id", "store_id", "first_name", "last_name", "email", "address_id", "activebool", "create_date", "last_update", "active"],
+  "fk_references": [
+    {"column": "store_id", "target_table": "silver_store"},
+    {"column": "address_id", "target_table": "silver_address"}
+  ],
+  "bootstrap_hook": null,
+  "field_mappings": [
+    {"target": "customer_id", "source_paths": ["after.customer_id", "before.customer_id"]},
+    {"target": "store_id", "source_paths": ["after.store_id", "before.store_id"]},
+    {"target": "first_name", "source_paths": ["after.first_name", "before.first_name"]},
+    {"target": "last_name", "source_paths": ["after.last_name", "before.last_name"]},
+    {"target": "email", "source_paths": ["after.email", "before.email"]},
+    {"target": "address_id", "source_paths": ["after.address_id", "before.address_id"]},
+    {"target": "activebool", "source_paths": ["after.activebool", "before.activebool"]},
+    {"target": "create_date", "source_paths": ["after.create_date", "before.create_date"]},
+    {"target": "last_update", "transform": "epoch_micros_to_timestamp", "source_paths": ["after.last_update", "before.last_update"]},
+    {"target": "active", "source_paths": ["after.active", "before.active"]}
+  ]
+}

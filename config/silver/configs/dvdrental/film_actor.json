@@ -1,0 +1,22 @@
+{
+  "table_id": "film_actor",
+  "enabled": true,
+  "bronze_table": "film_actor",
+  "silver_table": "silver_film_actor",
+  "cdc_contract_key": "cdc.public.film_actor",
+  "silver_contract_key": "silver.film_actor",
+  "checkpoint_name": "film_actor_silver_generic",
+  "primary_keys": ["film_id", "actor_id"],
+  "dedupe_order_columns": ["last_update", "event_ts_ms", "bronze_offset"],
+  "merge_core_fields": ["actor_id", "film_id", "last_update"],
+  "fk_references": [
+    {"column": "film_id", "target_table": "silver_film"},
+    {"column": "actor_id", "target_table": "silver_actor"}
+  ],
+  "bootstrap_hook": null,
+  "field_mappings": [
+    {"target": "actor_id", "source_paths": ["after.actor_id", "before.actor_id"]},
+    {"target": "film_id", "source_paths": ["after.film_id", "before.film_id"]},
+    {"target": "last_update", "transform": "epoch_micros_to_timestamp", "source_paths": ["after.last_update", "before.last_update"]}
+  ]
+}
