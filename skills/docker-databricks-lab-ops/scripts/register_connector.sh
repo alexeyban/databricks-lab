@@ -7,4 +7,4 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 cd "${REPO_ROOT}"
 curl -sS -X POST http://localhost:8083/connectors \
   -H "Content-Type: application/json" \
-  --data @postgres-connector.json
+  --data @../../ingestion/cdc/postgres-connector.json

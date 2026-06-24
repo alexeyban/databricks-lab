@@ -1,0 +1,22 @@
+{
+  "table_id": "film_category",
+  "enabled": true,
+  "bronze_table": "film_category",
+  "silver_table": "silver_film_category",
+  "cdc_contract_key": "cdc.public.film_category",
+  "silver_contract_key": "silver.film_category",
+  "checkpoint_name": "film_category_silver_generic",
+  "primary_keys": ["film_id", "category_id"],
+  "dedupe_order_columns": ["last_update", "event_ts_ms", "bronze_offset"],
+  "merge_core_fields": ["film_id", "category_id", "last_update"],
+  "fk_references": [
+    {"column": "film_id", "target_table": "silver_film"},
+    {"column": "category_id", "target_table": "silver_category"}
+  ],
+  "bootstrap_hook": null,
+  "field_mappings": [
+    {"target": "film_id", "source_paths": ["after.film_id", "before.film_id"]},
+    {"target": "category_id", "source_paths": ["after.category_id", "before.category_id"]},
+    {"target": "last_update", "transform": "epoch_micros_to_timestamp", "source_paths": ["after.last_update", "before.last_update"]}
+  ]
+}

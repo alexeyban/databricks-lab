@@ -1,0 +1,26 @@
+{
+  "table_id": "address",
+  "enabled": true,
+  "bronze_table": "address",
+  "silver_table": "silver_address",
+  "cdc_contract_key": "cdc.public.address",
+  "silver_contract_key": "silver.address",
+  "checkpoint_name": "address_silver_generic",
+  "primary_keys": ["address_id"],
+  "dedupe_order_columns": ["last_update", "event_ts_ms", "bronze_offset"],
+  "merge_core_fields": ["address_id", "address", "address2", "district", "city_id", "postal_code", "phone", "last_update"],
+  "fk_references": [
+    {"column": "city_id", "target_table": "silver_city"}
+  ],
+  "bootstrap_hook": null,
+  "field_mappings": [
+    {"target": "address_id", "source_paths": ["after.address_id", "before.address_id"]},
+    {"target": "address", "source_paths": ["after.address", "before.address"]},
+    {"target": "address2", "source_paths": ["after.address2", "before.address2"]},
+    {"target": "district", "source_paths": ["after.district", "before.district"]},
+    {"target": "city_id", "source_paths": ["after.city_id", "before.city_id"]},
+    {"target": "postal_code", "source_paths": ["after.postal_code", "before.postal_code"]},
+    {"target": "phone", "source_paths": ["after.phone", "before.phone"]},
+    {"target": "last_update", "transform": "epoch_micros_to_timestamp", "source_paths": ["after.last_update", "before.last_update"]}
+  ]
+}

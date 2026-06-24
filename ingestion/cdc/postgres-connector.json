@@ -1,0 +1,21 @@
+{
+  "name": "postgres-connector",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "database.hostname": "postgres",
+    "database.port": "5432",
+    "database.user": "postgres",
+    "database.password": "postgres",
+    "database.dbname": "dvdrental",
+    "database.server.name": "demo-server",
+    "plugin.name": "pgoutput",
+    "publication.name": "dbz_publication",
+    "slot.name": "debezium_slot",
+    "topic.prefix": "cdc",
+    "table.include.list": "public.actor,public.address,public.category,public.city,public.country,public.customer,public.film,public.film_actor,public.film_category,public.inventory,public.language,public.payment,public.rental,public.staff,public.store",
+    "tombstones.on.delete": "false",
+    "snapshot.mode": "initial",
+    "signal.data.collection": "public.debezium_signal",
+    "incremental.snapshot.chunk.size": "1024"
+  }
+}

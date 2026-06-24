@@ -1,0 +1,27 @@
+{
+  "table_id": "rental",
+  "enabled": true,
+  "bronze_table": "rental",
+  "silver_table": "silver_rental",
+  "cdc_contract_key": "cdc.public.rental",
+  "silver_contract_key": "silver.rental",
+  "checkpoint_name": "rental_silver_generic",
+  "primary_keys": ["rental_id"],
+  "dedupe_order_columns": ["last_update", "event_ts_ms", "bronze_offset"],
+  "merge_core_fields": ["rental_id", "rental_date", "inventory_id", "customer_id", "return_date", "staff_id", "last_update"],
+  "fk_references": [
+    {"column": "inventory_id", "target_table": "silver_inventory"},
+    {"column": "customer_id", "target_table": "silver_customer"},
+    {"column": "staff_id", "target_table": "silver_staff"}
+  ],
+  "bootstrap_hook": null,
+  "field_mappings": [
+    {"target": "rental_id", "source_paths": ["after.rental_id", "before.rental_id"]},
+    {"target": "rental_date", "transform": "epoch_micros_to_timestamp", "source_paths": ["after.rental_date", "before.rental_date"]},
+    {"target": "inventory_id", "source_paths": ["after.inventory_id", "before.inventory_id"]},
+    {"target": "customer_id", "source_paths": ["after.customer_id", "before.customer_id"]},
+    {"target": "return_date", "transform": "epoch_micros_to_timestamp", "source_paths": ["after.return_date", "before.return_date"]},
+    {"target": "staff_id", "source_paths": ["after.staff_id", "before.staff_id"]},
+    {"target": "last_update", "transform": "epoch_micros_to_timestamp", "source_paths": ["after.last_update", "before.last_update"]}
+  ]
+}
