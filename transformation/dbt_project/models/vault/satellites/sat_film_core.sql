@@ -9,14 +9,12 @@ WITH source AS (
     SELECT
         SHA2(CAST(film_id AS STRING), 256)  AS FILM_HK,
         CURRENT_TIMESTAMP()                    AS LOAD_DATE,
-        SHA2(CAST(title AS STRING) || '|' || CAST(description AS STRING) || '|' || CAST(release_year AS STRING) || '|' || CAST(length AS STRING) || '|' || CAST(rating AS STRING) || '|' || CAST(fulltext AS STRING), 256)           AS FILM_CORE_DIFF_HK,
+        SHA2(CAST(title AS STRING) || '|' || CAST(length AS STRING) || '|' || CAST(rating AS STRING) || '|' || CAST(last_update AS STRING), 256) AS FILM_CORE_DIFF_HK,
         'silver.silver_film'              AS RECORD_SOURCE,
         title,
-        description,
-        release_year,
         length,
         rating,
-        fulltext
+        last_update
     FROM {{ source('silver', 'silver_film') }}
 )
 SELECT s.*
