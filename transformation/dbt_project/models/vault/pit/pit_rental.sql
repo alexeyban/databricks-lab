@@ -10,20 +10,31 @@ WITH snapshot_dates AS (
 hub AS (
     SELECT DISTINCT RENTAL_HK
     FROM {{ ref('hub_rental') }}
+),
+sat_core_ranked AS (
+    SELECT
+        s.RENTAL_HK,
+        s.LOAD_DATE,
+        s.RENTAL_CORE_DIFF_HK,
+        snap.snapshot_date,
+        ROW_NUMBER() OVER (
+            PARTITION BY s.RENTAL_HK, snap.snapshot_date
+            ORDER BY s.LOAD_DATE DESC
+        ) AS _rn
+    FROM {{ ref('sat_rental_core') }} s
+    CROSS JOIN snapshot_dates snap
+    WHERE s.LOAD_DATE <= snap.snapshot_date
 )
 
 SELECT
     hub.RENTAL_HK,
     snap.snapshot_date,
     CURRENT_TIMESTAMP() AS LOAD_DATE,
-    s0.LOAD_DATE  AS SAT_RENTAL_CORE_LOAD_DATE,
-    s0.RENTAL_CORE_DIFF_HK  AS SAT_RENTAL_CORE_DIFF_HK
+    r0.LOAD_DATE        AS SAT_RENTAL_CORE_LOAD_DATE,
+    r0.RENTAL_CORE_DIFF_HK AS SAT_RENTAL_CORE_DIFF_HK
 FROM hub
 CROSS JOIN snapshot_dates snap
-LEFT JOIN {{ ref('sat_rental_core') }} s0
-    ON hub.RENTAL_HK = s0.RENTAL_HK
-    AND s0.LOAD_DATE = (
-        SELECT MAX(LOAD_DATE) FROM {{ ref('sat_rental_core') }} s_0
-        WHERE s_0.RENTAL_HK = hub.RENTAL_HK
-        AND s_0.LOAD_DATE <= snap.snapshot_date
-    )
+LEFT JOIN sat_core_ranked r0
+    ON r0.RENTAL_HK = hub.RENTAL_HK
+    AND r0.snapshot_date = snap.snapshot_date
+    AND r0._rn = 1
