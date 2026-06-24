@@ -25,7 +25,7 @@ TOKEN = os.environ["DATABRICKS_TOKEN"]
 HEADERS = {"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"}
 
 GIT_URL = "https://github.com/alexeyban/databricks-lab"
-GIT_BRANCH = "main"
+GIT_BRANCH = "feature/dbt-datavault"  # switch to main after PRs #8, #9, #10 are merged
 
 WAREHOUSE_ID = os.environ.get("DATABRICKS_WAREHOUSE_ID", "53165753164ae80e")
 CATALOG = os.environ.get("DATABRICKS_CATALOG", "workspace")
@@ -69,22 +69,33 @@ def build_bronze_settings():
             "task_key": "kafka_to_bronze",
             "notebook_task": {
                 "notebook_path": "ingestion/consumers/NB_ingest_to_bronze",
-                "base_parameters": {"catalog": CATALOG},
+                "base_parameters": {"CATALOG": CATALOG},
             },
         }],
     }
 
 
 def build_silver_settings():
+    # Split into 3 sequential batches of 5 to stay within serverless concurrency limits.
+    # Batch B waits for all of batch A; batch C waits for all of batch B.
+    batches = [TABLES[i:i + 5] for i in range(0, len(TABLES), 5)]
     tasks = []
-    for table in TABLES:
-        tasks.append({
-            "task_key": f"silver_{table}",
-            "notebook_task": {
-                "notebook_path": "processing/silver/NB_process_to_silver_generic",
-                "base_parameters": {"table_id": table, "catalog": CATALOG},
-            },
-        })
+    prev_batch_keys = []
+    for batch in batches:
+        batch_keys = []
+        for table in batch:
+            task = {
+                "task_key": f"silver_{table}",
+                "notebook_task": {
+                    "notebook_path": "processing/silver/NB_process_to_silver_generic",
+                    "base_parameters": {"TABLE_ID": table, "CATALOG": CATALOG},
+                },
+            }
+            if prev_batch_keys:
+                task["depends_on"] = [{"task_key": k} for k in prev_batch_keys]
+            tasks.append(task)
+            batch_keys.append(f"silver_{table}")
+        prev_batch_keys = batch_keys
     return {
         "name": "dvdrental-silver",
         "git_source": git_source(),
@@ -101,7 +112,7 @@ def build_vault_settings():
                 "task_key": "vault_hubs",
                 "notebook_task": {
                     "notebook_path": "processing/vault/NB_ingest_to_hubs",
-                    "base_parameters": {"catalog": CATALOG},
+                    "base_parameters": {"CATALOG": CATALOG},
                 },
             },
             {
@@ -109,7 +120,7 @@ def build_vault_settings():
                 "depends_on": [{"task_key": "vault_hubs"}],
                 "notebook_task": {
                     "notebook_path": "processing/vault/NB_ingest_to_links",
-                    "base_parameters": {"catalog": CATALOG},
+                    "base_parameters": {"CATALOG": CATALOG},
                 },
             },
             {
@@ -117,7 +128,7 @@ def build_vault_settings():
                 "depends_on": [{"task_key": "vault_hubs"}],
                 "notebook_task": {
                     "notebook_path": "processing/vault/NB_ingest_to_satellites",
-                    "base_parameters": {"catalog": CATALOG},
+                    "base_parameters": {"CATALOG": CATALOG},
                 },
             },
             {
@@ -128,7 +139,7 @@ def build_vault_settings():
                 ],
                 "notebook_task": {
                     "notebook_path": "processing/vault/NB_dv_business_vault",
-                    "base_parameters": {"catalog": CATALOG},
+                    "base_parameters": {"CATALOG": CATALOG},
                 },
             },
         ],
@@ -190,7 +201,14 @@ def build_vault_gold_settings(silver_id, vault_id):
     }
 
 
-def build_orchestrator_settings(silver_id, vault_gold_id):
+def build_orchestrator_settings(bronze_id, silver_id, vault_id, vault_gold_id):
+    """
+    Full end-to-end chain:
+      Bronze (availableNow trigger: drains Kafka → Bronze Delta, then stops)
+        → Silver (15 notebook tasks in 3 batches of 5)
+          → Vault notebooks (hubs → links/sats → business vault)
+            → dbt Vault+Gold (incremental vault models then gold data marts)
+    """
     return {
         "name": "dvdrental-orchestrator",
         "schedule": {
@@ -200,12 +218,26 @@ def build_orchestrator_settings(silver_id, vault_gold_id):
         },
         "tasks": [
             {
+                "task_key": "run_bronze",
+                "description": "Kafka → Bronze Delta (availableNow trigger, terminates when caught up)",
+                "run_job_task": {"job_id": bronze_id},
+            },
+            {
                 "task_key": "run_silver",
+                "description": "Bronze → Silver MERGE for all 15 dvdrental tables",
+                "depends_on": [{"task_key": "run_bronze"}],
                 "run_job_task": {"job_id": silver_id},
             },
             {
-                "task_key": "run_vault_gold",
+                "task_key": "run_vault",
+                "description": "Silver → Vault hubs/links/satellites/business-vault (PySpark notebooks)",
                 "depends_on": [{"task_key": "run_silver"}],
+                "run_job_task": {"job_id": vault_id},
+            },
+            {
+                "task_key": "run_vault_gold",
+                "description": "Vault → dbt incremental vault models + Gold data marts",
+                "depends_on": [{"task_key": "run_vault"}],
                 "run_job_task": {"job_id": vault_gold_id},
             },
         ],
@@ -257,10 +289,15 @@ def main():
     print("\n[vault-gold dbt] creating/updating...")
     vg_id = ensure_vault_gold_job()
 
-    print("\n[orchestrator] updating...")
+    print("\n[orchestrator] updating (bronze → silver → vault → vault-gold-dbt)...")
     reset_job(
         JOB_IDS["dvdrental-orchestrator"],
-        build_orchestrator_settings(JOB_IDS["dvdrental-silver"], vg_id),
+        build_orchestrator_settings(
+            JOB_IDS["dvdrental-bronze"],
+            JOB_IDS["dvdrental-silver"],
+            JOB_IDS["dvdrental-vault"],
+            vg_id,
+        ),
     )
 
     print("\n=== All jobs updated ===")
@@ -269,6 +306,9 @@ def main():
     print(f"  vault        : {JOB_IDS['dvdrental-vault']}")
     print(f"  vault-gold   : {vg_id}")
     print(f"  orchestrator : {JOB_IDS['dvdrental-orchestrator']}")
+    print()
+    print("  Orchestrator chain:")
+    print("    run_bronze → run_silver → run_vault → run_vault_gold")
 
     if args.run_silver:
         print("\n[run] triggering silver job...")
@@ -276,7 +316,7 @@ def main():
         wait_for_run(run_id, "dvdrental-silver")
 
     if args.run_orchestrator:
-        print("\n[run] triggering orchestrator (silver -> vault+gold)...")
+        print("\n[run] triggering orchestrator (bronze → silver → vault → vault-gold-dbt)...")
         run_id = run_job(JOB_IDS["dvdrental-orchestrator"], "dvdrental-orchestrator")
         wait_for_run(run_id, "dvdrental-orchestrator", poll_secs=30)
 
