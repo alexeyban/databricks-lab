@@ -6,7 +6,7 @@ WITH stores AS (
 ),
 payments_daily AS (
     SELECT
-        DATE(spp.payment_date)      AS payment_day,
+        DATE(spc.payment_date)      AS payment_day,
         lrs.STAFF_HK,
         spp.PAYMENT_HK,
         spp.amount

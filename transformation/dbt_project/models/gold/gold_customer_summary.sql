@@ -6,7 +6,7 @@ WITH customer AS (
 ),
 cust_sat AS (
     SELECT * FROM {{ ref('sat_customer_core') }}
-    WHERE (ACTOR_HK, LOAD_DATE) IN (
+    WHERE (CUSTOMER_HK, LOAD_DATE) IN (
         SELECT CUSTOMER_HK, MAX(LOAD_DATE)
         FROM {{ ref('sat_customer_core') }}
         GROUP BY CUSTOMER_HK
