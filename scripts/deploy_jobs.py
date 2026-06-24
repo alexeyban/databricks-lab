@@ -29,6 +29,7 @@ GIT_BRANCH = "feature/dbt-datavault"  # switch to main after PRs #8, #9, #10 are
 
 WAREHOUSE_ID = os.environ.get("DATABRICKS_WAREHOUSE_ID", "53165753164ae80e")
 CATALOG = os.environ.get("DATABRICKS_CATALOG", "workspace")
+DV_MODEL_PATH = f"/Volumes/{CATALOG}/default/mnt/pipeline_configs/datavault/dv_model.json"
 
 TABLES = [
     "actor", "address", "category", "city", "country",
@@ -112,7 +113,7 @@ def build_vault_settings():
                 "task_key": "vault_hubs",
                 "notebook_task": {
                     "notebook_path": "processing/vault/NB_ingest_to_hubs",
-                    "base_parameters": {"CATALOG": CATALOG},
+                    "base_parameters": {"CATALOG": CATALOG, "MODEL_PATH": DV_MODEL_PATH},
                 },
             },
             {
@@ -120,7 +121,7 @@ def build_vault_settings():
                 "depends_on": [{"task_key": "vault_hubs"}],
                 "notebook_task": {
                     "notebook_path": "processing/vault/NB_ingest_to_links",
-                    "base_parameters": {"CATALOG": CATALOG},
+                    "base_parameters": {"CATALOG": CATALOG, "MODEL_PATH": DV_MODEL_PATH},
                 },
             },
             {
@@ -128,7 +129,7 @@ def build_vault_settings():
                 "depends_on": [{"task_key": "vault_hubs"}],
                 "notebook_task": {
                     "notebook_path": "processing/vault/NB_ingest_to_satellites",
-                    "base_parameters": {"CATALOG": CATALOG},
+                    "base_parameters": {"CATALOG": CATALOG, "MODEL_PATH": DV_MODEL_PATH},
                 },
             },
             {
@@ -139,7 +140,7 @@ def build_vault_settings():
                 ],
                 "notebook_task": {
                     "notebook_path": "processing/vault/NB_dv_business_vault",
-                    "base_parameters": {"CATALOG": CATALOG},
+                    "base_parameters": {"CATALOG": CATALOG, "MODEL_PATH": DV_MODEL_PATH},
                 },
             },
         ],
@@ -163,38 +164,22 @@ def ensure_vault_gold_job():
 
 
 def build_vault_gold_settings(silver_id, vault_id):
+    # Use a notebook task instead of dbt_task — dbt_task requires a workspace
+    # feature that may not be enabled. The NB_run_dbt notebook pip-installs
+    # dbt-databricks and runs dbt build via subprocess.
     return {
         "name": "dvdrental-vault-gold",
         "git_source": git_source(),
-        "environments": [
-            {
-                "environment_key": "dbt_env",
-                "spec": {
-                    "client": "1",
-                    "dependencies": ["dbt-databricks>=1.6.0"],
-                },
-            }
-        ],
         "tasks": [
             {
-                "task_key": "dbt_vault",
-                "environment_key": "dbt_env",
-                "dbt_task": {
-                    "project_directory": "transformation/dbt_project",
-                    "commands": ["dbt deps", "dbt build --select vault"],
-                    "warehouse_id": WAREHOUSE_ID,
-                    "schema": "vault",
-                },
-            },
-            {
-                "task_key": "dbt_gold",
-                "environment_key": "dbt_env",
-                "depends_on": [{"task_key": "dbt_vault"}],
-                "dbt_task": {
-                    "project_directory": "transformation/dbt_project",
-                    "commands": ["dbt build --select gold"],
-                    "warehouse_id": WAREHOUSE_ID,
-                    "schema": "gold",
+                "task_key": "dbt_vault_gold",
+                "notebook_task": {
+                    "notebook_path": "transformation/NB_run_dbt",
+                    "base_parameters": {
+                        "DBT_SELECT": "vault gold",
+                        "CATALOG": CATALOG,
+                        "WAREHOUSE_ID": WAREHOUSE_ID,
+                    },
                 },
             },
         ],
