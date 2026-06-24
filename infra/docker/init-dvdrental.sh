@@ -3,13 +3,15 @@ set -e
 
 echo "=== Setting up dvdrental database ==="
 
-# Restore dvdrental from pre-downloaded SQL dump (mounted at /tmp/dvdrental.sql)
-# Strip lines not supported by PG15 (e.g. transaction_timeout from PG16+ dumps)
+RESTORE_FILE=/tmp/dvdrental.tar
+
+if [ ! -f "$RESTORE_FILE" ]; then
+  echo "ERROR: $RESTORE_FILE not found. Mount dvdrental.tar into the container." >&2
+  exit 1
+fi
+
 echo "Restoring dvdrental into database '${POSTGRES_DB}'..."
-grep -v "transaction_timeout" /tmp/dvdrental.sql \
-  | sed 's/English_United States\.1252/en_US.utf8/g' \
-  | sed 's|\$\$PATH\$\$|/tmp/data|g' \
-  | psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" --set ON_ERROR_STOP=off -q
+pg_restore -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" --no-owner --no-privileges "$RESTORE_FILE" || true
 
 echo "dvdrental restored successfully"
 
