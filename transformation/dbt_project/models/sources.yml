@@ -20,47 +20,97 @@ sources:
       warn_after: {count: 30, period: minute}
       error_after: {count: 2, period: hour}
     tables:
-      - name: silver_rental
-        description: Current-state rentals produced by the Silver Databricks streaming merge.
+      - name: silver_actor
+        loaded_at_field: last_update
+        columns:
+          - name: actor_id
+            tests: [not_null, unique]
+      - name: silver_address
+        loaded_at_field: last_update
+        columns:
+          - name: address_id
+            tests: [not_null, unique]
+      - name: silver_category
+        loaded_at_field: last_update
+        columns:
+          - name: category_id
+            tests: [not_null, unique]
+      - name: silver_city
+        loaded_at_field: last_update
+        columns:
+          - name: city_id
+            tests: [not_null, unique]
+      - name: silver_country
+        loaded_at_field: last_update
+        columns:
+          - name: country_id
+            tests: [not_null, unique]
+      - name: silver_customer
         loaded_at_field: last_updated_dt
         columns:
-          - name: rental_id
-            tests:
-              - not_null
-              - unique
-          - name: inventory_id
-            tests:
-              - not_null
           - name: customer_id
-            tests:
-              - not_null
-          - name: last_updated_dt
-            tests:
-              - not_null
-
+            tests: [not_null, unique]
       - name: silver_film
         description: Current-state film catalogue produced by the Silver Databricks streaming merge.
         loaded_at_field: last_update
         columns:
           - name: film_id
-            tests:
-              - not_null
-              - unique
+            tests: [not_null, unique]
           - name: title
-            tests:
-              - not_null
-
+            tests: [not_null]
+      - name: silver_film_actor
+        loaded_at_field: last_update
+        columns:
+          - name: film_id
+            tests: [not_null]
+          - name: actor_id
+            tests: [not_null]
+      - name: silver_film_category
+        loaded_at_field: last_update
+        columns:
+          - name: film_id
+            tests: [not_null]
+          - name: category_id
+            tests: [not_null]
+      - name: silver_inventory
+        loaded_at_field: last_update
+        columns:
+          - name: inventory_id
+            tests: [not_null, unique]
+      - name: silver_language
+        loaded_at_field: last_update
+        columns:
+          - name: language_id
+            tests: [not_null, unique]
       - name: silver_payment
         description: Current-state payments produced by the Silver Databricks streaming merge.
         loaded_at_field: last_updated_dt
         columns:
           - name: payment_id
-            tests:
-              - not_null
-              - unique
+            tests: [not_null, unique]
           - name: rental_id
-            tests:
-              - not_null
+            tests: [not_null]
           - name: amount
-            tests:
-              - not_null
+            tests: [not_null]
+      - name: silver_rental
+        description: Current-state rentals produced by the Silver Databricks streaming merge.
+        loaded_at_field: last_updated_dt
+        columns:
+          - name: rental_id
+            tests: [not_null, unique]
+          - name: inventory_id
+            tests: [not_null]
+          - name: customer_id
+            tests: [not_null]
+          - name: last_updated_dt
+            tests: [not_null]
+      - name: silver_staff
+        loaded_at_field: last_update
+        columns:
+          - name: staff_id
+            tests: [not_null, unique]
+      - name: silver_store
+        loaded_at_field: last_update
+        columns:
+          - name: store_id
+            tests: [not_null, unique]

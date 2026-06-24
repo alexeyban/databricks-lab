@@ -1,0 +1,215 @@
+bundle:
+  name: dvdrental-cdc-pipeline
+
+workspace:
+  host: ${DATABRICKS_HOST}
+
+variables:
+  catalog:
+    description: Unity Catalog catalog name
+    default: workspace
+  dbt_warehouse_id:
+    description: SQL warehouse ID for dbt runs
+    default: 53165753164ae80e
+  node_type:
+    description: Worker node type
+    default: i3.xlarge
+
+targets:
+  dev:
+    mode: development
+    default: true
+  prod:
+    mode: production
+    workspace:
+      host: ${DATABRICKS_HOST}
+
+resources:
+  jobs:
+
+    # Bronze: Structured streaming from Kafka to Bronze Delta tables.
+    # This is a long-running streaming job; trigger manually or separately.
+    dvdrental-bronze:
+      name: "[dvdrental] Bronze - Kafka to Bronze"
+      tags:
+        layer: bronze
+        project: dvdrental
+      job_clusters:
+        - job_cluster_key: bronze_cluster
+          new_cluster:
+            spark_version: "15.4.x-scala2.12"
+            node_type_id: ${var.node_type}
+            num_workers: 2
+            spark_conf:
+              spark.databricks.delta.preview.enabled: "true"
+      tasks:
+        - task_key: kafka_to_bronze
+          job_cluster_key: bronze_cluster
+          notebook_task:
+            notebook_path: ../../ingestion/consumers/NB_ingest_to_bronze.ipynb
+            base_parameters:
+              catalog: ${var.catalog}
+
+    # Silver: Bronze to Silver MERGE for all 15 source tables (15 parallel tasks).
+    dvdrental-silver:
+      name: "[dvdrental] Silver - Bronze to Silver (15 tables)"
+      tags:
+        layer: silver
+        project: dvdrental
+      job_clusters:
+        - job_cluster_key: silver_cluster
+          new_cluster:
+            spark_version: "15.4.x-scala2.12"
+            node_type_id: ${var.node_type}
+            num_workers: 2
+      tasks:
+        - task_key: silver_actor
+          job_cluster_key: silver_cluster
+          notebook_task:
+            notebook_path: ../../processing/silver/NB_process_to_silver_generic.ipynb
+            base_parameters:
+              table_id: actor
+              catalog: ${var.catalog}
+        - task_key: silver_address
+          job_cluster_key: silver_cluster
+          notebook_task:
+            notebook_path: ../../processing/silver/NB_process_to_silver_generic.ipynb
+            base_parameters:
+              table_id: address
+              catalog: ${var.catalog}
+        - task_key: silver_category
+          job_cluster_key: silver_cluster
+          notebook_task:
+            notebook_path: ../../processing/silver/NB_process_to_silver_generic.ipynb
+            base_parameters:
+              table_id: category
+              catalog: ${var.catalog}
+        - task_key: silver_city
+          job_cluster_key: silver_cluster
+          notebook_task:
+            notebook_path: ../../processing/silver/NB_process_to_silver_generic.ipynb
+            base_parameters:
+              table_id: city
+              catalog: ${var.catalog}
+        - task_key: silver_country
+          job_cluster_key: silver_cluster
+          notebook_task:
+            notebook_path: ../../processing/silver/NB_process_to_silver_generic.ipynb
+            base_parameters:
+              table_id: country
+              catalog: ${var.catalog}
+        - task_key: silver_customer
+          job_cluster_key: silver_cluster
+          notebook_task:
+            notebook_path: ../../processing/silver/NB_process_to_silver_generic.ipynb
+            base_parameters:
+              table_id: customer
+              catalog: ${var.catalog}
+        - task_key: silver_film
+          job_cluster_key: silver_cluster
+          notebook_task:
+            notebook_path: ../../processing/silver/NB_process_to_silver_generic.ipynb
+            base_parameters:
+              table_id: film
+              catalog: ${var.catalog}
+        - task_key: silver_film_actor
+          job_cluster_key: silver_cluster
+          notebook_task:
+            notebook_path: ../../processing/silver/NB_process_to_silver_generic.ipynb
+            base_parameters:
+              table_id: film_actor
+              catalog: ${var.catalog}
+        - task_key: silver_film_category
+          job_cluster_key: silver_cluster
+          notebook_task:
+            notebook_path: ../../processing/silver/NB_process_to_silver_generic.ipynb
+            base_parameters:
+              table_id: film_category
+              catalog: ${var.catalog}
+        - task_key: silver_inventory
+          job_cluster_key: silver_cluster
+          notebook_task:
+            notebook_path: ../../processing/silver/NB_process_to_silver_generic.ipynb
+            base_parameters:
+              table_id: inventory
+              catalog: ${var.catalog}
+        - task_key: silver_language
+          job_cluster_key: silver_cluster
+          notebook_task:
+            notebook_path: ../../processing/silver/NB_process_to_silver_generic.ipynb
+            base_parameters:
+              table_id: language
+              catalog: ${var.catalog}
+        - task_key: silver_payment
+          job_cluster_key: silver_cluster
+          notebook_task:
+            notebook_path: ../../processing/silver/NB_process_to_silver_generic.ipynb
+            base_parameters:
+              table_id: payment
+              catalog: ${var.catalog}
+        - task_key: silver_rental
+          job_cluster_key: silver_cluster
+          notebook_task:
+            notebook_path: ../../processing/silver/NB_process_to_silver_generic.ipynb
+            base_parameters:
+              table_id: rental
+              catalog: ${var.catalog}
+        - task_key: silver_staff
+          job_cluster_key: silver_cluster
+          notebook_task:
+            notebook_path: ../../processing/silver/NB_process_to_silver_generic.ipynb
+            base_parameters:
+              table_id: staff
+              catalog: ${var.catalog}
+        - task_key: silver_store
+          job_cluster_key: silver_cluster
+          notebook_task:
+            notebook_path: ../../processing/silver/NB_process_to_silver_generic.ipynb
+            base_parameters:
+              table_id: store
+              catalog: ${var.catalog}
+
+    # Vault + Gold: dbt build running DataVault models then Gold data marts.
+    dvdrental-vault-gold:
+      name: "[dvdrental] Vault + Gold - dbt build"
+      tags:
+        layer: vault_gold
+        project: dvdrental
+      tasks:
+        - task_key: dbt_vault
+          dbt_task:
+            project_directory: ../../transformation/dbt_project
+            commands:
+              - "dbt deps"
+              - "dbt build --select vault"
+            warehouse_id: ${var.dbt_warehouse_id}
+            schema: vault
+        - task_key: dbt_gold
+          depends_on:
+            - task_key: dbt_vault
+          dbt_task:
+            project_directory: ../../transformation/dbt_project
+            commands:
+              - "dbt build --select gold"
+            warehouse_id: ${var.dbt_warehouse_id}
+            schema: gold
+
+    # Orchestrator: runs Silver then Vault+Gold in sequence.
+    # Bronze runs independently (it is a continuous streaming job).
+    dvdrental-orchestrator:
+      name: "[dvdrental] Orchestrator - Silver to Vault+Gold"
+      tags:
+        project: dvdrental
+      schedule:
+        quartz_cron_expression: "0 0 2 * * ?"
+        timezone_id: "UTC"
+        pause_status: PAUSED
+      tasks:
+        - task_key: run_silver
+          run_job_task:
+            job_id: ${resources.jobs.dvdrental-silver.id}
+        - task_key: run_vault_gold
+          depends_on:
+            - task_key: run_silver
+          run_job_task:
+            job_id: ${resources.jobs.dvdrental-vault-gold.id}

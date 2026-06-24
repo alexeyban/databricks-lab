@@ -19,3 +19,19 @@ on-run-end:
 models:
   cdc_gold:
     +materialized: table
+    vault:
+      +schema: vault
+      +tags: ['vault']
+      hubs:
+        +materialized: incremental
+      links:
+        +materialized: incremental
+      satellites:
+        +materialized: incremental
+      pit:
+        +materialized: table
+      bridge:
+        +materialized: table
+    gold:
+      +schema: gold
+      +tags: ['gold']
