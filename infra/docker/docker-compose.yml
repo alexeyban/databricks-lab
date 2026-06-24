@@ -43,9 +43,9 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: dvdrental
     volumes:
-      - ./docker/init-dvdrental.sh:/docker-entrypoint-initdb.d/init.sh
-      - ${DVDRENTAL_SQL_PATH:-../../../infra/docker/dvdrental.sql}:/tmp/dvdrental.sql
-      - ./docker/data:/tmp/data
+      - ./init-dvdrental.sh:/docker-entrypoint-initdb.d/init.sh
+      - ./dvdrental.tar:/tmp/dvdrental.tar:ro
+      - postgres-data:/var/lib/postgresql/data
     command: >
       postgres
       -c wal_level=logical
@@ -181,3 +181,6 @@ services:
       bash -c "pip install --quiet confluent-kafka databricks-sdk &&
                python scripts/kafka_to_volume.py --bootstrap kafka:9092"
     restart: unless-stopped
+
+volumes:
+  postgres-data:
