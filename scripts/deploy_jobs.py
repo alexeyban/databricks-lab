@@ -25,7 +25,7 @@ TOKEN = os.environ["DATABRICKS_TOKEN"]
 HEADERS = {"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"}
 
 GIT_URL = "https://github.com/alexeyban/databricks-lab"
-GIT_BRANCH = "feature/dbt-datavault"  # switch to main after PRs #8, #9, #10 are merged
+GIT_BRANCH = "main"
 
 WAREHOUSE_ID = os.environ.get("DATABRICKS_WAREHOUSE_ID", "53165753164ae80e")
 CATALOG = os.environ.get("DATABRICKS_CATALOG", "workspace")
