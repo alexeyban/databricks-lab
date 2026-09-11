@@ -45,8 +45,8 @@ Current state of the project and prioritised next steps.
 | Agent system: 24 specialized agents + 24 skills | Done |
 | pump.fun near-real-time ingestion — websocket producer (`ingestion/pumpfun/`, vendored from standalone `pumpapi-ingestor`), Dockerfile + Docker Compose | Done |
 | pump.fun producer — zstd-compress + base64-encode each batch into one JSON envelope per file (vs. raw JSONL per event) | Done |
-| pump.fun Bronze — Delta Live Tables pipeline decoding the compressed transport into raw event JSON (`pumpfun-bronze-dlt`) | Done |
-| pump.fun Silver — typed `silver_pumpfun_trades` (buy/sell) and `silver_pumpfun_tokens` (create/migrate, current-state) | Done |
+| pump.fun Bronze + Silver — `pumpapi-lakehouse`, a single Lakeflow Declarative Pipeline (`pyspark.pipelines`): decodes the compressed transport into `bronze.pump_events_raw`, then fans out into `silver.pump_events` (all events, typed), `silver.pump_tokens` (token creations), `silver.pump_transfers` (exploded transfers) | Done |
+| pump.fun deployment — `pumpapi-lakehouse` pipeline + `pumpfun-bronze` trigger job declared in `orchestration/bundle/databricks.yml` (Databricks Asset Bundles) | Done |
 
 ---
 
@@ -146,25 +146,29 @@ Phase 4 of `design/dq_gdpr/IMPLEMENTATION_PLAN.md`.
 
 ### 9. pump.fun — remaining action types, Vault/Gold, and DQ parity
 
-Bronze + Silver are done for the highest-value action types (`buy`/`sell`
-trades, `create`/`migrate` token lifecycle). See
-`design/pumpfun/PUMPFUN_PIPELINE.md`.
+Bronze + Silver are done for `pump_events` (all events, general schema),
+`pump_tokens` (`create` events), and `pump_transfers` (`transfer` events).
+See `design/pumpfun/PUMPFUN_PIPELINE.md` and `pumpapi-lakehouse/README.md`.
 
 **Tasks:**
-- Parse remaining action types into Silver: `createPool`/`add`/`remove` (pool
-  liquidity state), `transfer`, `claimCashback`, `claimCreatorFees`
+- Parse remaining action types not yet in a dedicated Silver table:
+  `buy`/`sell` trades, `migrate`, `createPool`/`add`/`remove` (pool
+  liquidity state), `claimCashback`, `claimCreatorFees`
 - Decide whether pump.fun needs a Vault (Data Vault 2.0) layer or goes
-  straight Silver → Gold (no CDC deletes/updates to historize beyond what
-  `silver_pumpfun_tokens` current-state already covers)
+  straight Silver → Gold (no CDC deletes/updates to historize; `pump_tokens`
+  is already append-only per creation event)
 - dbt Gold marts: trading volume / momentum by token, migration funnel
-  (created → migrated → rugged), wallet-level P&L from `tradersInvolved`
+  (created → migrated → rugged), wallet-level P&L from `tradersInvolved` /
+  `pump_transfers`
 - Bronze quarantine + schema-drift monitoring parity with the dvdrental
   pipeline (`monitoring.schema_drift_log`, `bronze.quarantine`) — including
   handling for envelopes with an unsupported/future `codec` value
-- Un-pause the `pumpfun-bronze-dlt` / `pumpfun-bronze` / `pumpfun-silver`
-  schedules in `orchestration/bundle/databricks.yml` once the producer is
-  running in production, and run `databricks bundle deploy` to actually
-  create the DLT pipeline + its trigger job (not yet deployed to a live
-  workspace as of this writing)
+- Un-pause the `pumpfun-bronze` job schedule (which triggers
+  `pumpapi-lakehouse`) in `orchestration/bundle/databricks.yml` once the
+  producer is running in production, and run `databricks bundle deploy` to
+  actually create the pipeline + trigger job (not yet deployed to a live
+  workspace as of this writing) — note the CLI here is the legacy
+  `databricks-cli` (0.18.0, no `bundle` subcommand); the modern unified
+  Databricks CLI is required for `databricks bundle deploy`/`validate`
 - Deploy `ingestion/pumpfun` as a long-running service (systemd unit
   included) somewhere with reliable uptime, rather than a dev machine

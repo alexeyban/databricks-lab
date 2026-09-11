@@ -216,61 +216,39 @@ resources:
 
     # --- pump.fun near-real-time pipeline (independent of dvdrental) ---
     # Producer: the ingestion/pumpfun websocket service (runs outside Databricks,
-    # e.g. via systemd) lands JSONL files in a Unity Catalog Volume. These two
-    # jobs are scheduled every few minutes to keep Bronze/Silver near-real-time.
-
-    # Bronze: triggers the pumpfun-bronze-dlt pipeline (see resources.pipelines
-    # below) on a schedule. The actual decode/parse logic lives in the DLT
-    # pipeline, not here — a plain notebook_task can't run `dlt` source code.
+    # e.g. via systemd/Docker) lands compressed batch envelopes in a Unity
+    # Catalog Volume. This job triggers the pumpapi-lakehouse Lakeflow
+    # Declarative Pipeline (resources.pipelines below) every 2 minutes, which
+    # does all the Bronze + Silver work in one continuous DAG — a plain
+    # notebook_task can't run pyspark.pipelines source code.
     pumpfun-bronze:
-      name: "[pumpfun] Bronze - trigger DLT pipeline"
+      name: "[pumpfun] Trigger pumpapi-lakehouse pipeline"
       tags:
-        layer: bronze
         project: pumpfun
       schedule:
         quartz_cron_expression: "0 */2 * * * ?"
         timezone_id: "UTC"
         pause_status: PAUSED
       tasks:
-        - task_key: run_pumpfun_bronze_dlt
+        - task_key: run_pumpapi_lakehouse
           pipeline_task:
-            pipeline_id: ${resources.pipelines.pumpfun-bronze-dlt.id}
-
-    # Silver: parse buy/sell trades + create/migrate token lifecycle events.
-    pumpfun-silver:
-      name: "[pumpfun] Silver - Bronze to trades/tokens"
-      tags:
-        layer: silver
-        project: pumpfun
-      schedule:
-        quartz_cron_expression: "0 */2 * * * ?"
-        timezone_id: "UTC"
-        pause_status: PAUSED
-      job_clusters:
-        - job_cluster_key: pumpfun_silver_cluster
-          new_cluster:
-            spark_version: "15.4.x-scala2.12"
-            node_type_id: ${var.node_type}
-            num_workers: 1
-      tasks:
-        - task_key: pumpfun_bronze_to_silver
-          job_cluster_key: pumpfun_silver_cluster
-          notebook_task:
-            notebook_path: ../../processing/silver/NB_process_pumpfun_silver.ipynb
-            base_parameters:
-              catalog: ${var.catalog}
+            pipeline_id: ${resources.pipelines.pumpapi-lakehouse.id}
 
   pipelines:
 
-    # Bronze: Delta Live Tables pipeline that decodes the zstd+base64 batch
-    # envelopes landed by ingestion/pumpfun into bronze.pumpfun_events.
+    # pump.fun Bronze + Silver, as one Lakeflow Declarative Pipeline (source:
+    # ../../pumpapi-lakehouse/transformations/). Decodes the zstd+base64
+    # batch envelopes landed by ingestion/pumpfun into
+    # bronze.pump_events_raw, then fans out into three Silver tables:
+    # pump_events (all events, typed), pump_tokens (create events, one row
+    # per token), pump_transfers (transfer events, one row per transfer).
     # Triggered (not continuous) — the pumpfun-bronze job above runs it every
     # 2 minutes. Deploy with `databricks bundle deploy`; the raw-API
     # scripts/deploy_jobs.py does not manage this resource (see its docstring).
-    pumpfun-bronze-dlt:
-      name: "[pumpfun] Bronze - DLT (zstd+base64 decode)"
+    pumpapi-lakehouse:
+      name: "[pumpfun] pumpapi-lakehouse (Bronze + Silver)"
       catalog: ${var.catalog}
-      target: bronze
+      schema: silver
       development: true
       continuous: false
       photon: false
@@ -280,7 +258,8 @@ resources:
           num_workers: 1
           node_type_id: ${var.node_type}
       libraries:
-        - notebook:
-            path: ../../ingestion/consumers/NB_dlt_pumpfun_bronze.ipynb
-      configuration:
-        pumpfun.landing_path: /Volumes/${var.catalog}/default/mnt/pumpapi
+        - glob:
+            include: ../../pumpapi-lakehouse/transformations/**
+      environment:
+        dependencies:
+          - zstandard

@@ -17,8 +17,8 @@ PostgreSQL dvdrental (WAL)
 pump.fun (Solana on-chain trades)
    → PumpAPI websocket → ingestion/pumpfun service (outside Databricks)
      → batch → JSONL → zstd-compress → base64-encode → Unity Catalog Volume
-       → Databricks Bronze (Delta Live Tables: decode → decompress → parse)
-         → Databricks Silver (typed trades + token lifecycle tables)
+       → pumpapi-lakehouse (Lakeflow Declarative Pipeline: decode → decompress → parse)
+         → Bronze (pump_events_raw) + 3 Silver tables (events / tokens / transfers)
 ```
 
 See [`docs/architecture.md`](docs/architecture.md) for the full pump.fun pipeline design.
@@ -26,11 +26,18 @@ See [`docs/architecture.md`](docs/architecture.md) for the full pump.fun pipelin
 ### Directory Structure
 
 ```
+pumpapi-lakehouse/           # pump.fun Bronze + Silver — one Lakeflow Declarative Pipeline
+└── transformations/
+    ├── bronze_pump_events.py      ← decode zstd+base64 → workspace.bronze.pump_events_raw
+    ├── silver_pump_events.py      ← all events, typed  → silver.pump_events
+    ├── silver_pump_tokens.py      ← action=create      → silver.pump_tokens
+    └── silver_pump_transfers.py   ← action=transfer     → silver.pump_transfers
+
 ingestion/                  # Ingestion layer (Bronze)
 ├── consumers/
 │   ├── NB_ingest_to_bronze.ipynb                    ← dvdrental Bronze streaming notebook
-│   ├── NB_dlt_pumpfun_bronze.ipynb                  ← pump.fun Bronze — Delta Live Tables pipeline
-│   └── outdated__NB_ingest_pumpfun_to_bronze.ipynb  ← superseded, kept for reference
+│   ├── outdated__NB_ingest_pumpfun_to_bronze.ipynb  ← superseded, kept for reference
+│   └── outdated__NB_dlt_pumpfun_bronze.ipynb        ← superseded, kept for reference
 ├── cdc/
 │   └── postgres-connector.json     ← Debezium connector config
 ├── pumpfun/                 # Standalone pump.fun websocket ingestor (runs outside Databricks)
@@ -45,8 +52,8 @@ ingestion/                  # Ingestion layer (Bronze)
 
 processing/                 # All processing logic
 ├── silver/
-│   ├── NB_process_to_silver_generic.ipynb  ← Metadata-driven Bronze → Silver (dvdrental)
-│   └── NB_process_pumpfun_silver.ipynb     ← pump.fun trades + token lifecycle tables
+│   ├── NB_process_to_silver_generic.ipynb        ← Metadata-driven Bronze → Silver (dvdrental)
+│   └── outdated__NB_process_pumpfun_silver.ipynb ← superseded, kept for reference
 ├── vault/
 │   ├── NB_ingest_to_hubs.ipynb
 │   ├── NB_ingest_to_links.ipynb
@@ -142,9 +149,8 @@ docker compose --profile kafka-to-volume up -d kafka-to-volume
 | `dvdrental-vault` | 950203691556666 | 4 | Hubs → Links+Sats → Business Vault |
 | `dvdrental-vault-gold` | 83436339832760 | 1 | dbt build vault+gold via NB_run_dbt |
 | `dvdrental-orchestrator` | 684287727358557 | 4 | Chains: bronze → silver → vault → vault-gold |
-| `pumpfun-bronze-dlt` | deployed via `databricks bundle deploy` | 1 pipeline | DLT: decode zstd+base64 → Bronze |
-| `pumpfun-bronze` | deployed via `databricks bundle deploy` | 1 | Triggers `pumpfun-bronze-dlt`, every 2 min |
-| `pumpfun-silver` | created by `deploy_jobs.py` | 1 | Bronze → Silver trades/tokens, every 2 min |
+| `pumpapi-lakehouse` | deployed via `databricks bundle deploy` | 1 pipeline | Lakeflow: Bronze + 3 Silver tables |
+| `pumpfun-bronze` | deployed via `databricks bundle deploy` | 1 | Triggers `pumpapi-lakehouse`, every 2 min |
 
 ---
 
@@ -168,10 +174,12 @@ it as a systemd service instead. Once it's landing files in the Volume, run:
 cd orchestration/bundle && databricks bundle deploy -t dev
 ```
 
-to deploy the `pumpfun-bronze-dlt` Delta Live Tables pipeline and the
-`pumpfun-bronze` job that triggers it every 2 minutes (the Pipelines API
-doesn't support the `git_source` mechanism `scripts/deploy_jobs.py` uses for
-plain notebook jobs, so that script only manages `pumpfun-silver`, below).
+to deploy `pumpapi-lakehouse` — a single Lakeflow Declarative Pipeline
+(`pyspark.pipelines`, see [`pumpapi-lakehouse/README.md`](pumpapi-lakehouse/README.md))
+that does Bronze + all 3 Silver tables — and the `pumpfun-bronze` job that
+triggers it every 2 minutes. The Pipelines API doesn't support the
+`git_source` mechanism `scripts/deploy_jobs.py` uses for plain notebook
+jobs, so that script manages no pump.fun resources at all.
 
 ---
 
