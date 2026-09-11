@@ -1,7 +1,9 @@
 # pump.fun Near-Real-Time Pipeline
 **Repo:** databricks-lab / alexeyban
 
-> **Status (2026-09-11): Bronze + Silver implemented. Vault/Gold not started — see `ROADMAP.md` §9.**
+> **Status (2026-09-11): Bronze + Silver implemented, transport is zstd+base64
+> compressed batches decoded by a Delta Live Tables pipeline. Vault/Gold not
+> started — see `ROADMAP.md` §9.**
 
 ---
 
@@ -35,19 +37,36 @@ glossary), so `signature` alone is not a unique row key.
    Jobs' run-then-terminate model. Vendored into `ingestion/pumpfun/` from
    the original `pumpapi-ingestor` project so the whole pipeline lives in
    one repo; deployed via the included systemd unit.
-2. **Landing format is JSONL in a Unity Catalog Volume**
-   (`/Volumes/workspace/default/mnt/pumpapi`), uploaded via the Databricks
-   Files API — the same "producer writes files, Databricks Auto Loader
-   reads them" pattern as the `kafka-to-volume` fallback already used for
-   dvdrental Bronze, so no new connectivity story (no ngrok, no direct
-   socket from Databricks) was needed.
-3. **Bronze keeps the event payload as raw JSON text**, not a parsed
-   struct. Auto Loader schema inference/evolution is a poor fit for a
-   payload whose shape depends on `action` — inferring one merged schema
-   across all action types would produce an increasingly wide, mostly-null
-   table. `cloudFiles.format = "text"` is used specifically to avoid this;
-   only a handful of top-level fields (`action`, `mint`, `signature`,
-   `poolId`) are extracted for pruning/debugging.
+2. **Landing format is a compressed batch envelope in a Unity Catalog
+   Volume** (`/Volumes/workspace/default/mnt/pumpapi`), uploaded via the
+   Databricks Files API — the same "producer writes files, Databricks Auto
+   Loader reads them" pattern as the `kafka-to-volume` fallback already used
+   for dvdrental Bronze, so no new connectivity story (no ngrok, no direct
+   socket from Databricks) was needed. Each flushed batch (default 5000
+   events) is serialized as JSONL, compressed with **zstd** (~4-5x smaller
+   in practice), and base64-encoded into one JSON envelope per file:
+   `{"_source", "_ingested_at", "event_count", "codec", "uncompressed_bytes",
+   "data_b64"}`. This trades a bit of CPU (compress on the producer,
+   decompress in Bronze) for meaningfully less network/storage volume at
+   the file-upload cadence this producer runs at — a deliberate choice over
+   landing raw JSONL text files directly.
+3. **Bronze decodes the transport via a Delta Live Tables pipeline**
+   (`ingestion/consumers/NB_dlt_pumpfun_bronze.ipynb`), not a plain
+   notebook job. Auto Loader reads the envelope files with a fixed schema
+   (no inference needed — the envelope shape is fixed), a Python UDF
+   base64-decodes and zstd-decompresses `data_b64` back into JSONL text
+   (`zstandard` installed via `%pip install` in the pipeline source, which
+   DLT supports), and the result is split back into lines and parsed. The
+   final `bronze.pumpfun_events` table keeps each **event** payload as raw
+   JSON text, not a parsed struct — Auto Loader schema inference/evolution
+   on the decoded content would still be a poor fit for a payload whose
+   shape depends on `action` (inferring one merged schema across all
+   action types would produce an increasingly wide, mostly-null table).
+   Only a handful of top-level fields (`action`, `mint`, `signature`,
+   `poolId`) are extracted for pruning/debugging. The pre-compression
+   design (plain Auto Loader notebook, `cloudFiles.format = "text"` over
+   raw JSONL) is kept for reference at
+   `ingestion/consumers/outdated__NB_ingest_pumpfun_to_bronze.ipynb`.
 4. **Silver parses per action-family, not per fixed table config.** The
    existing metadata-driven Silver notebook
    (`processing/silver/NB_process_to_silver_generic.ipynb`) is built around
@@ -60,9 +79,13 @@ glossary), so `signature` alone is not a unique row key.
    left in Bronze only (§ROADMAP.md 9).
 5. **Independent job graph, not chained into `dvdrental-orchestrator`.**
    Different domain, different cadence, different failure blast radius.
-   `pumpfun-bronze` and `pumpfun-silver` are separate Databricks jobs on
-   their own 2-minute cron schedule (`orchestration/bundle/databricks.yml`,
-   `scripts/deploy_jobs.py`).
+   `pumpfun-bronze-dlt` (the DLT pipeline), `pumpfun-bronze` (the job that
+   triggers it), and `pumpfun-silver` are separate resources on their own
+   2-minute cron schedule. Because the Pipelines API doesn't support the
+   `git_source` mechanism the Jobs API does, the DLT pipeline and its
+   trigger job are declared in `orchestration/bundle/databricks.yml` and
+   deployed with `databricks bundle deploy`; `scripts/deploy_jobs.py`
+   (raw REST + `git_source`) only manages `pumpfun-silver`.
 6. **No Vault layer yet.** Data Vault 2.0 exists in this repo to historize
    mutable CDC state (updates/deletes) with full audit trail. pump.fun
    events are naturally append-only (trades) or already current-state
@@ -74,10 +97,11 @@ glossary), so `signature` alone is not a unique row key.
 ```
 pump.fun on-chain activity
   → PumpAPI websocket
-    → ingestion/pumpfun/app (buffer → JSONL → Databricks Files API)
-      → /Volumes/workspace/default/mnt/pumpapi  (JSONL, git-ignored runtime data)
-        → pumpfun-bronze job (Auto Loader, cron every 2 min)
-          → workspace.bronze.pumpfun_events (raw JSON text)
+    → ingestion/pumpfun/app (buffer → JSONL → zstd-compress → base64 → Databricks Files API)
+      → /Volumes/workspace/default/mnt/pumpapi  (one JSON envelope per batch, git-ignored runtime data)
+        → pumpfun-bronze-dlt (DLT pipeline: decode → decompress → parse; triggered
+          every 2 min by the pumpfun-bronze job's pipeline_task)
+          → workspace.bronze.pumpfun_events (raw JSON text per event)
             → pumpfun-silver job (cron every 2 min)
               → workspace.silver.silver_pumpfun_trades   (buy/sell, append-only)
               → workspace.silver.silver_pumpfun_tokens   (create/migrate, current-state by mint)
@@ -87,7 +111,7 @@ pump.fun on-chain activity
 
 | Table | Layer | Key | Notes |
 |-------|-------|-----|-------|
-| `bronze.pumpfun_events` | Bronze | none (append) | `event_json` is the raw event as JSON text |
+| `bronze.pumpfun_events` | Bronze (DLT) | none (append) | `event_json` is the raw event as JSON text |
 | `silver.silver_pumpfun_trades` | Silver | signature + action + mint + pool_id | one row per trade side per pool |
 | `silver.silver_pumpfun_tokens` | Silver | mint | mint/freeze authority, pool type, migration status |
 

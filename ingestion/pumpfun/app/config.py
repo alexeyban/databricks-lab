@@ -14,6 +14,10 @@ class Config:
     batch_size: int = 500
     flush_interval_seconds: int = 10
 
+    # Compression: each flushed batch is serialized as JSONL, compressed with
+    # zstd, then base64-encoded before being written to disk (see writer.py).
+    zstd_level: int = 3
+
     # WebSocket
     reconnect_delay_seconds: int = 5
     ping_interval_seconds: int = 20
@@ -46,6 +50,9 @@ class Config:
             ),
             flush_interval_seconds=int(
                 os.getenv("FLUSH_INTERVAL_SECONDS", "10")
+            ),
+            zstd_level=int(
+                os.getenv("ZSTD_LEVEL", "3")
             ),
             reconnect_delay_seconds=int(
                 os.getenv("RECONNECT_DELAY_SECONDS", "5")

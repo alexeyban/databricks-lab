@@ -16,8 +16,8 @@ PostgreSQL dvdrental (WAL)
 
 pump.fun (Solana on-chain trades)
    → PumpAPI websocket → ingestion/pumpfun service (outside Databricks)
-     → Unity Catalog Volume (JSONL)
-       → Databricks Bronze (raw event JSON, Auto Loader)
+     → batch → JSONL → zstd-compress → base64-encode → Unity Catalog Volume
+       → Databricks Bronze (Delta Live Tables: decode → decompress → parse)
          → Databricks Silver (typed trades + token lifecycle tables)
 ```
 
@@ -28,12 +28,14 @@ See [`docs/architecture.md`](docs/architecture.md) for the full pump.fun pipelin
 ```
 ingestion/                  # Ingestion layer (Bronze)
 ├── consumers/
-│   ├── NB_ingest_to_bronze.ipynb          ← dvdrental Bronze streaming notebook
-│   └── NB_ingest_pumpfun_to_bronze.ipynb  ← pump.fun Bronze streaming notebook
+│   ├── NB_ingest_to_bronze.ipynb                    ← dvdrental Bronze streaming notebook
+│   ├── NB_dlt_pumpfun_bronze.ipynb                  ← pump.fun Bronze — Delta Live Tables pipeline
+│   └── outdated__NB_ingest_pumpfun_to_bronze.ipynb  ← superseded, kept for reference
 ├── cdc/
 │   └── postgres-connector.json     ← Debezium connector config
 ├── pumpfun/                 # Standalone pump.fun websocket ingestor (runs outside Databricks)
-│   ├── app/                        ← websocket client → JSONL writer → Databricks uploader
+│   ├── app/                        ← websocket client → zstd+base64 batch writer → Databricks uploader
+│   ├── Dockerfile / docker-compose.yml
 │   ├── systemd/pumpfun-ingestor.service
 │   └── README.md
 └── generators/             # Data mutation scripts
@@ -140,7 +142,8 @@ docker compose --profile kafka-to-volume up -d kafka-to-volume
 | `dvdrental-vault` | 950203691556666 | 4 | Hubs → Links+Sats → Business Vault |
 | `dvdrental-vault-gold` | 83436339832760 | 1 | dbt build vault+gold via NB_run_dbt |
 | `dvdrental-orchestrator` | 684287727358557 | 4 | Chains: bronze → silver → vault → vault-gold |
-| `pumpfun-bronze` | created by `deploy_jobs.py` | 1 | Volume (Auto Loader) → Bronze, every 2 min |
+| `pumpfun-bronze-dlt` | deployed via `databricks bundle deploy` | 1 pipeline | DLT: decode zstd+base64 → Bronze |
+| `pumpfun-bronze` | deployed via `databricks bundle deploy` | 1 | Triggers `pumpfun-bronze-dlt`, every 2 min |
 | `pumpfun-silver` | created by `deploy_jobs.py` | 1 | Bronze → Silver trades/tokens, every 2 min |
 
 ---
@@ -149,20 +152,26 @@ docker compose --profile kafka-to-volume up -d kafka-to-volume
 
 Independent of the dvdrental CDC pipeline above. The producer
 (`ingestion/pumpfun/`) is a standalone websocket service — it does not run
-as a Databricks job, since it needs to be always-on rather than scheduled:
+as a Databricks job, since it needs to be always-on rather than scheduled.
+Each batch is compressed (zstd) and base64-encoded before upload:
 
 ```bash
 cd ingestion/pumpfun
-python3 -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
 cp .env.example .env   # fill in DATABRICKS_HOST / DATABRICKS_TOKEN
-python -m app.main
+docker compose up -d --build   # or: python3 -m venv venv && pip install -r requirements.txt && python -m app.main
 ```
 
 See [`ingestion/pumpfun/README.md`](ingestion/pumpfun/README.md) for running
-it as a systemd service. Once it's landing files in the Volume, the
-`pumpfun-bronze` / `pumpfun-silver` Databricks jobs (deployed by
-`scripts/deploy_jobs.py` below) pick them up every 2 minutes.
+it as a systemd service instead. Once it's landing files in the Volume, run:
+
+```bash
+cd orchestration/bundle && databricks bundle deploy -t dev
+```
+
+to deploy the `pumpfun-bronze-dlt` Delta Live Tables pipeline and the
+`pumpfun-bronze` job that triggers it every 2 minutes (the Pipelines API
+doesn't support the `git_source` mechanism `scripts/deploy_jobs.py` uses for
+plain notebook jobs, so that script only manages `pumpfun-silver`, below).
 
 ---
 

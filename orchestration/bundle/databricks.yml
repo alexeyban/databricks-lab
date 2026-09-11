@@ -219,9 +219,11 @@ resources:
     # e.g. via systemd) lands JSONL files in a Unity Catalog Volume. These two
     # jobs are scheduled every few minutes to keep Bronze/Silver near-real-time.
 
-    # Bronze: Auto Loader from the pump.fun landing Volume to Bronze Delta.
+    # Bronze: triggers the pumpfun-bronze-dlt pipeline (see resources.pipelines
+    # below) on a schedule. The actual decode/parse logic lives in the DLT
+    # pipeline, not here — a plain notebook_task can't run `dlt` source code.
     pumpfun-bronze:
-      name: "[pumpfun] Bronze - Volume to Bronze"
+      name: "[pumpfun] Bronze - trigger DLT pipeline"
       tags:
         layer: bronze
         project: pumpfun
@@ -229,19 +231,10 @@ resources:
         quartz_cron_expression: "0 */2 * * * ?"
         timezone_id: "UTC"
         pause_status: PAUSED
-      job_clusters:
-        - job_cluster_key: pumpfun_bronze_cluster
-          new_cluster:
-            spark_version: "15.4.x-scala2.12"
-            node_type_id: ${var.node_type}
-            num_workers: 1
       tasks:
-        - task_key: pumpfun_to_bronze
-          job_cluster_key: pumpfun_bronze_cluster
-          notebook_task:
-            notebook_path: ../../ingestion/consumers/NB_ingest_pumpfun_to_bronze.ipynb
-            base_parameters:
-              catalog: ${var.catalog}
+        - task_key: run_pumpfun_bronze_dlt
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.pumpfun-bronze-dlt.id}
 
     # Silver: parse buy/sell trades + create/migrate token lifecycle events.
     pumpfun-silver:
@@ -266,3 +259,28 @@ resources:
             notebook_path: ../../processing/silver/NB_process_pumpfun_silver.ipynb
             base_parameters:
               catalog: ${var.catalog}
+
+  pipelines:
+
+    # Bronze: Delta Live Tables pipeline that decodes the zstd+base64 batch
+    # envelopes landed by ingestion/pumpfun into bronze.pumpfun_events.
+    # Triggered (not continuous) — the pumpfun-bronze job above runs it every
+    # 2 minutes. Deploy with `databricks bundle deploy`; the raw-API
+    # scripts/deploy_jobs.py does not manage this resource (see its docstring).
+    pumpfun-bronze-dlt:
+      name: "[pumpfun] Bronze - DLT (zstd+base64 decode)"
+      catalog: ${var.catalog}
+      target: bronze
+      development: true
+      continuous: false
+      photon: false
+      channel: CURRENT
+      clusters:
+        - label: default
+          num_workers: 1
+          node_type_id: ${var.node_type}
+      libraries:
+        - notebook:
+            path: ../../ingestion/consumers/NB_dlt_pumpfun_bronze.ipynb
+      configuration:
+        pumpfun.landing_path: /Volumes/${var.catalog}/default/mnt/pumpapi

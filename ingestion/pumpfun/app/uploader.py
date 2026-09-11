@@ -26,7 +26,7 @@ class DatabricksUploader:
         """Return JSONL files that have not been uploaded yet."""
         return sorted(
             filepath
-            for filepath in self.output_dir.rglob("*.jsonl")
+            for filepath in self.output_dir.rglob("*.json")
             if self.uploaded_dir_name not in filepath.parts
         )
 

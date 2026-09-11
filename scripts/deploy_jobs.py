@@ -10,6 +10,11 @@ Usage:
 Environment variables required:
     DATABRICKS_HOST   - e.g. https://dbc-xxxx.cloud.databricks.com
     DATABRICKS_TOKEN  - personal access token
+
+NOTE: this script deploys plain notebook-task jobs via the raw Jobs API +
+git_source. It does NOT deploy the pumpfun-bronze-dlt Delta Live Tables
+pipeline (Pipelines API doesn't support git_source the way Jobs does) — use
+`databricks bundle deploy` from orchestration/bundle/ for that one resource.
 """
 
 import argparse
@@ -186,19 +191,6 @@ def build_vault_gold_settings(silver_id, vault_id):
     }
 
 
-def build_pumpfun_bronze_settings():
-    return {
-        "name": "pumpfun-bronze",
-        "git_source": git_source(),
-        "tasks": [{
-            "task_key": "pumpfun_to_bronze",
-            "notebook_task": {
-                "notebook_path": "ingestion/consumers/NB_ingest_pumpfun_to_bronze",
-                "base_parameters": {"CATALOG": CATALOG},
-            },
-        }],
-    }
-
 
 def build_pumpfun_silver_settings():
     return {
@@ -329,9 +321,6 @@ def main():
         ),
     )
 
-    print("\n[pumpfun-bronze] creating/updating...")
-    pumpfun_bronze_id = ensure_job_by_name("pumpfun-bronze", build_pumpfun_bronze_settings())
-
     print("\n[pumpfun-silver] creating/updating...")
     pumpfun_silver_id = ensure_job_by_name("pumpfun-silver", build_pumpfun_silver_settings())
 
@@ -341,15 +330,18 @@ def main():
     print(f"  vault          : {JOB_IDS['dvdrental-vault']}")
     print(f"  vault-gold     : {vg_id}")
     print(f"  orchestrator   : {JOB_IDS['dvdrental-orchestrator']}")
-    print(f"  pumpfun-bronze : {pumpfun_bronze_id}")
     print(f"  pumpfun-silver : {pumpfun_silver_id}")
     print()
     print("  Orchestrator chain:")
     print("    run_bronze → run_silver → run_vault → run_vault_gold")
     print()
     print("  pump.fun pipeline is independent (not chained into the orchestrator):")
-    print("    pumpfun-bronze → pumpfun-silver")
-    print("    Schedule both to run every few minutes for near-real-time freshness.")
+    print("    pumpfun-bronze-dlt (pipeline) → pumpfun-bronze (job, triggers it) → pumpfun-silver")
+    print("    NOTE: pumpfun-bronze-dlt is a Delta Live Tables pipeline, not a plain")
+    print("    notebook job — this script's raw Jobs-API git_source approach can't")
+    print("    deploy it. Deploy it (and the pumpfun-bronze trigger job) with:")
+    print("      databricks bundle deploy -t dev   # from orchestration/bundle/")
+    print("    This script only manages pumpfun-silver.")
 
     if args.run_silver:
         print("\n[run] triggering silver job...")

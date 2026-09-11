@@ -43,8 +43,9 @@ Current state of the project and prioritised next steps.
 | DQ + GDPR runbooks (`design/runbooks/DQ_INCIDENT_RUNBOOK.md`, `ERASURE_SOP.md`) | Done |
 | Confluence documentation generator (`runtime/confluence_doc_generator.py`) | Done |
 | Agent system: 24 specialized agents + 24 skills | Done |
-| pump.fun near-real-time ingestion — websocket producer (`ingestion/pumpfun/`, vendored from standalone `pumpapi-ingestor`) | Done |
-| pump.fun Bronze — Auto Loader from UC Volume, raw event JSON (`pumpfun-bronze` job) | Done |
+| pump.fun near-real-time ingestion — websocket producer (`ingestion/pumpfun/`, vendored from standalone `pumpapi-ingestor`), Dockerfile + Docker Compose | Done |
+| pump.fun producer — zstd-compress + base64-encode each batch into one JSON envelope per file (vs. raw JSONL per event) | Done |
+| pump.fun Bronze — Delta Live Tables pipeline decoding the compressed transport into raw event JSON (`pumpfun-bronze-dlt`) | Done |
 | pump.fun Silver — typed `silver_pumpfun_trades` (buy/sell) and `silver_pumpfun_tokens` (create/migrate, current-state) | Done |
 
 ---
@@ -158,9 +159,12 @@ trades, `create`/`migrate` token lifecycle). See
 - dbt Gold marts: trading volume / momentum by token, migration funnel
   (created → migrated → rugged), wallet-level P&L from `tradersInvolved`
 - Bronze quarantine + schema-drift monitoring parity with the dvdrental
-  pipeline (`monitoring.schema_drift_log`, `bronze.quarantine`)
-- Un-pause the `pumpfun-bronze` / `pumpfun-silver` job schedules in
-  `orchestration/bundle/databricks.yml` once the producer is running in
-  production
+  pipeline (`monitoring.schema_drift_log`, `bronze.quarantine`) — including
+  handling for envelopes with an unsupported/future `codec` value
+- Un-pause the `pumpfun-bronze-dlt` / `pumpfun-bronze` / `pumpfun-silver`
+  schedules in `orchestration/bundle/databricks.yml` once the producer is
+  running in production, and run `databricks bundle deploy` to actually
+  create the DLT pipeline + its trigger job (not yet deployed to a live
+  workspace as of this writing)
 - Deploy `ingestion/pumpfun` as a long-running service (systemd unit
   included) somewhere with reliable uptime, rather than a dev machine
