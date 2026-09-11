@@ -213,3 +213,56 @@ resources:
             - task_key: run_silver
           run_job_task:
             job_id: ${resources.jobs.dvdrental-vault-gold.id}
+
+    # --- pump.fun near-real-time pipeline (independent of dvdrental) ---
+    # Producer: the ingestion/pumpfun websocket service (runs outside Databricks,
+    # e.g. via systemd) lands JSONL files in a Unity Catalog Volume. These two
+    # jobs are scheduled every few minutes to keep Bronze/Silver near-real-time.
+
+    # Bronze: Auto Loader from the pump.fun landing Volume to Bronze Delta.
+    pumpfun-bronze:
+      name: "[pumpfun] Bronze - Volume to Bronze"
+      tags:
+        layer: bronze
+        project: pumpfun
+      schedule:
+        quartz_cron_expression: "0 */2 * * * ?"
+        timezone_id: "UTC"
+        pause_status: PAUSED
+      job_clusters:
+        - job_cluster_key: pumpfun_bronze_cluster
+          new_cluster:
+            spark_version: "15.4.x-scala2.12"
+            node_type_id: ${var.node_type}
+            num_workers: 1
+      tasks:
+        - task_key: pumpfun_to_bronze
+          job_cluster_key: pumpfun_bronze_cluster
+          notebook_task:
+            notebook_path: ../../ingestion/consumers/NB_ingest_pumpfun_to_bronze.ipynb
+            base_parameters:
+              catalog: ${var.catalog}
+
+    # Silver: parse buy/sell trades + create/migrate token lifecycle events.
+    pumpfun-silver:
+      name: "[pumpfun] Silver - Bronze to trades/tokens"
+      tags:
+        layer: silver
+        project: pumpfun
+      schedule:
+        quartz_cron_expression: "0 */2 * * * ?"
+        timezone_id: "UTC"
+        pause_status: PAUSED
+      job_clusters:
+        - job_cluster_key: pumpfun_silver_cluster
+          new_cluster:
+            spark_version: "15.4.x-scala2.12"
+            node_type_id: ${var.node_type}
+            num_workers: 1
+      tasks:
+        - task_key: pumpfun_bronze_to_silver
+          job_cluster_key: pumpfun_silver_cluster
+          notebook_task:
+            notebook_path: ../../processing/silver/NB_process_pumpfun_silver.ipynb
+            base_parameters:
+              catalog: ${var.catalog}

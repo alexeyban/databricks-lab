@@ -43,6 +43,9 @@ Current state of the project and prioritised next steps.
 | DQ + GDPR runbooks (`design/runbooks/DQ_INCIDENT_RUNBOOK.md`, `ERASURE_SOP.md`) | Done |
 | Confluence documentation generator (`runtime/confluence_doc_generator.py`) | Done |
 | Agent system: 24 specialized agents + 24 skills | Done |
+| pump.fun near-real-time ingestion — websocket producer (`ingestion/pumpfun/`, vendored from standalone `pumpapi-ingestor`) | Done |
+| pump.fun Bronze — Auto Loader from UC Volume, raw event JSON (`pumpfun-bronze` job) | Done |
+| pump.fun Silver — typed `silver_pumpfun_trades` (buy/sell) and `silver_pumpfun_tokens` (create/migrate, current-state) | Done |
 
 ---
 
@@ -137,3 +140,27 @@ Phase 4 of `design/dq_gdpr/IMPLEMENTATION_PLAN.md`.
 - Databricks SQL DQ dashboard (pass rate by layer 30d, recent failures, Bronze volume trend)
 - Databricks SQL GDPR SLA dashboard (open requests by age, completed erasures trend)
 - Export dashboard JSON to `design/dashboards/`
+
+---
+
+### 9. pump.fun — remaining action types, Vault/Gold, and DQ parity
+
+Bronze + Silver are done for the highest-value action types (`buy`/`sell`
+trades, `create`/`migrate` token lifecycle). See
+`design/pumpfun/PUMPFUN_PIPELINE.md`.
+
+**Tasks:**
+- Parse remaining action types into Silver: `createPool`/`add`/`remove` (pool
+  liquidity state), `transfer`, `claimCashback`, `claimCreatorFees`
+- Decide whether pump.fun needs a Vault (Data Vault 2.0) layer or goes
+  straight Silver → Gold (no CDC deletes/updates to historize beyond what
+  `silver_pumpfun_tokens` current-state already covers)
+- dbt Gold marts: trading volume / momentum by token, migration funnel
+  (created → migrated → rugged), wallet-level P&L from `tradersInvolved`
+- Bronze quarantine + schema-drift monitoring parity with the dvdrental
+  pipeline (`monitoring.schema_drift_log`, `bronze.quarantine`)
+- Un-pause the `pumpfun-bronze` / `pumpfun-silver` job schedules in
+  `orchestration/bundle/databricks.yml` once the producer is running in
+  production
+- Deploy `ingestion/pumpfun` as a long-running service (systemd unit
+  included) somewhere with reliable uptime, rather than a dev machine

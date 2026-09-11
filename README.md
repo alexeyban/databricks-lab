@@ -1,6 +1,6 @@
 # Databricks CDC Lakehouse Lab
 
-End-to-end reference implementation of a Change Data Capture pipeline from the **dvdrental** PostgreSQL sample database into a Databricks medallion lakehouse (Bronze → Silver → Vault → Gold).
+End-to-end reference implementation of a Change Data Capture pipeline from the **dvdrental** PostgreSQL sample database into a Databricks medallion lakehouse (Bronze → Silver → Vault → Gold). It also includes a second, independent near-real-time pipeline that ingests live trading events from **pump.fun**, the Solana meme-coin launchpad.
 
 Agent-system inspiration was borrowed from [agency-agents](https://github.com/msitarzewski/agency-agents/).
 
@@ -13,16 +13,29 @@ PostgreSQL dvdrental (WAL)
        → Databricks Silver (current-state via MERGE, schema evolution)
          → Databricks Vault (Data Vault 2.0: Hubs / Links / Satellites / PIT / Bridge)
            → dbt Gold (business-ready models with data quality tests)
+
+pump.fun (Solana on-chain trades)
+   → PumpAPI websocket → ingestion/pumpfun service (outside Databricks)
+     → Unity Catalog Volume (JSONL)
+       → Databricks Bronze (raw event JSON, Auto Loader)
+         → Databricks Silver (typed trades + token lifecycle tables)
 ```
+
+See [`docs/architecture.md`](docs/architecture.md) for the full pump.fun pipeline design.
 
 ### Directory Structure
 
 ```
 ingestion/                  # Ingestion layer (Bronze)
 ├── consumers/
-│   └── NB_ingest_to_bronze.ipynb   ← Bronze streaming notebook
+│   ├── NB_ingest_to_bronze.ipynb          ← dvdrental Bronze streaming notebook
+│   └── NB_ingest_pumpfun_to_bronze.ipynb  ← pump.fun Bronze streaming notebook
 ├── cdc/
 │   └── postgres-connector.json     ← Debezium connector config
+├── pumpfun/                 # Standalone pump.fun websocket ingestor (runs outside Databricks)
+│   ├── app/                        ← websocket client → JSONL writer → Databricks uploader
+│   ├── systemd/pumpfun-ingestor.service
+│   └── README.md
 └── generators/             # Data mutation scripts
     ├── load_generator.py           ← Rental/payment generator
     ├── load_products_generator.py  ← Film update generator
@@ -30,7 +43,8 @@ ingestion/                  # Ingestion layer (Bronze)
 
 processing/                 # All processing logic
 ├── silver/
-│   └── NB_process_to_silver_generic.ipynb  ← Metadata-driven Bronze → Silver
+│   ├── NB_process_to_silver_generic.ipynb  ← Metadata-driven Bronze → Silver (dvdrental)
+│   └── NB_process_pumpfun_silver.ipynb     ← pump.fun trades + token lifecycle tables
 ├── vault/
 │   ├── NB_ingest_to_hubs.ipynb
 │   ├── NB_ingest_to_links.ipynb
@@ -61,7 +75,7 @@ orchestration/              # Jobs / workflows
 └── bundle/                 ← Databricks Asset Bundles (future)
 
 scripts/                    # CLI utilities
-├── deploy_jobs.py          ← Deploy all 5 Databricks jobs
+├── deploy_jobs.py          ← Deploy all Databricks jobs (dvdrental + pumpfun)
 ├── push_secrets_to_databricks.py
 ├── upload_vault_config.py
 └── reset_checkpoints.py
@@ -126,6 +140,29 @@ docker compose --profile kafka-to-volume up -d kafka-to-volume
 | `dvdrental-vault` | 950203691556666 | 4 | Hubs → Links+Sats → Business Vault |
 | `dvdrental-vault-gold` | 83436339832760 | 1 | dbt build vault+gold via NB_run_dbt |
 | `dvdrental-orchestrator` | 684287727358557 | 4 | Chains: bronze → silver → vault → vault-gold |
+| `pumpfun-bronze` | created by `deploy_jobs.py` | 1 | Volume (Auto Loader) → Bronze, every 2 min |
+| `pumpfun-silver` | created by `deploy_jobs.py` | 1 | Bronze → Silver trades/tokens, every 2 min |
+
+---
+
+### pump.fun Pipeline
+
+Independent of the dvdrental CDC pipeline above. The producer
+(`ingestion/pumpfun/`) is a standalone websocket service — it does not run
+as a Databricks job, since it needs to be always-on rather than scheduled:
+
+```bash
+cd ingestion/pumpfun
+python3 -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env   # fill in DATABRICKS_HOST / DATABRICKS_TOKEN
+python -m app.main
+```
+
+See [`ingestion/pumpfun/README.md`](ingestion/pumpfun/README.md) for running
+it as a systemd service. Once it's landing files in the Volume, the
+`pumpfun-bronze` / `pumpfun-silver` Databricks jobs (deployed by
+`scripts/deploy_jobs.py` below) pick them up every 2 minutes.
 
 ---
 
@@ -193,7 +230,7 @@ python3 scripts/push_secrets_to_databricks.py
 # Upload vault config to Unity Catalog Volume (required before first vault run)
 python3 scripts/upload_vault_config.py
 
-# Deploy all 5 Databricks jobs
+# Deploy all Databricks jobs (dvdrental + pumpfun)
 python3 scripts/deploy_jobs.py
 
 # Deploy and immediately trigger the full orchestrator run
