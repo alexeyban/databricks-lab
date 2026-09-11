@@ -32,6 +32,19 @@ cp .env.example .env   # fill in DATABRICKS_HOST / DATABRICKS_TOKEN
 python -m app.main
 ```
 
+## Running with Docker
+
+```bash
+cd ingestion/pumpfun
+cp .env.example .env   # fill in DATABRICKS_HOST / DATABRICKS_TOKEN
+docker compose up -d --build
+docker compose logs -f
+```
+
+The local JSONL buffer (`./data`) is mounted as a volume so completed/uploaded
+files survive container restarts and stay inspectable from the host. Stop
+with `docker compose down`.
+
 ## Running as a systemd service
 
 ```bash

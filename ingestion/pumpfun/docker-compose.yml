@@ -1,0 +1,10 @@
+services:
+  pumpfun-ingestor:
+    build: .
+    image: pumpfun-ingestor:local
+    container_name: pumpfun-ingestor
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
