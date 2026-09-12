@@ -1,6 +1,6 @@
 # Databricks CDC Lakehouse Lab
 
-End-to-end reference implementation of a Change Data Capture pipeline from the **dvdrental** PostgreSQL sample database into a Databricks medallion lakehouse (Bronze → Silver → Vault → Gold).
+End-to-end reference implementation of a Change Data Capture pipeline from the **dvdrental** PostgreSQL sample database into a Databricks medallion lakehouse (Bronze → Silver → Vault → Gold). It also includes a second, independent near-real-time pipeline that ingests live trading events from **pump.fun**, the Solana meme-coin launchpad.
 
 Agent-system inspiration was borrowed from [agency-agents](https://github.com/msitarzewski/agency-agents/).
 
@@ -13,16 +13,38 @@ PostgreSQL dvdrental (WAL)
        → Databricks Silver (current-state via MERGE, schema evolution)
          → Databricks Vault (Data Vault 2.0: Hubs / Links / Satellites / PIT / Bridge)
            → dbt Gold (business-ready models with data quality tests)
+
+pump.fun (Solana on-chain trades)
+   → PumpAPI websocket → ingestion/pumpfun service (outside Databricks)
+     → batch → JSONL → zstd-compress → base64-encode → Unity Catalog Volume
+       → pumpapi-lakehouse (Lakeflow Declarative Pipeline: decode → decompress → parse)
+         → Bronze (pump_events_raw) + 3 Silver tables (events / tokens / transfers)
 ```
+
+See [`docs/architecture.md`](docs/architecture.md) for the full pump.fun pipeline design.
 
 ### Directory Structure
 
 ```
+pumpapi-lakehouse/           # pump.fun Bronze + Silver — one Lakeflow Declarative Pipeline
+└── transformations/
+    ├── bronze_pump_events.py      ← decode zstd+base64 → workspace.bronze.pump_events_raw
+    ├── silver_pump_events.py      ← all events, typed  → silver.pump_events
+    ├── silver_pump_tokens.py      ← action=create      → silver.pump_tokens
+    └── silver_pump_transfers.py   ← action=transfer     → silver.pump_transfers
+
 ingestion/                  # Ingestion layer (Bronze)
 ├── consumers/
-│   └── NB_ingest_to_bronze.ipynb   ← Bronze streaming notebook
+│   ├── NB_ingest_to_bronze.ipynb                    ← dvdrental Bronze streaming notebook
+│   ├── outdated__NB_ingest_pumpfun_to_bronze.ipynb  ← superseded, kept for reference
+│   └── outdated__NB_dlt_pumpfun_bronze.ipynb        ← superseded, kept for reference
 ├── cdc/
 │   └── postgres-connector.json     ← Debezium connector config
+├── pumpfun/                 # Standalone pump.fun websocket ingestor (runs outside Databricks)
+│   ├── app/                        ← websocket client → zstd+base64 batch writer → Databricks uploader
+│   ├── Dockerfile / docker-compose.yml
+│   ├── systemd/pumpfun-ingestor.service
+│   └── README.md
 └── generators/             # Data mutation scripts
     ├── load_generator.py           ← Rental/payment generator
     ├── load_products_generator.py  ← Film update generator
@@ -30,7 +52,8 @@ ingestion/                  # Ingestion layer (Bronze)
 
 processing/                 # All processing logic
 ├── silver/
-│   └── NB_process_to_silver_generic.ipynb  ← Metadata-driven Bronze → Silver
+│   ├── NB_process_to_silver_generic.ipynb        ← Metadata-driven Bronze → Silver (dvdrental)
+│   └── outdated__NB_process_pumpfun_silver.ipynb ← superseded, kept for reference
 ├── vault/
 │   ├── NB_ingest_to_hubs.ipynb
 │   ├── NB_ingest_to_links.ipynb
@@ -61,7 +84,7 @@ orchestration/              # Jobs / workflows
 └── bundle/                 ← Databricks Asset Bundles (future)
 
 scripts/                    # CLI utilities
-├── deploy_jobs.py          ← Deploy all 5 Databricks jobs
+├── deploy_jobs.py          ← Deploy all Databricks jobs (dvdrental + pumpfun)
 ├── push_secrets_to_databricks.py
 ├── upload_vault_config.py
 └── reset_checkpoints.py
@@ -126,6 +149,37 @@ docker compose --profile kafka-to-volume up -d kafka-to-volume
 | `dvdrental-vault` | 950203691556666 | 4 | Hubs → Links+Sats → Business Vault |
 | `dvdrental-vault-gold` | 83436339832760 | 1 | dbt build vault+gold via NB_run_dbt |
 | `dvdrental-orchestrator` | 684287727358557 | 4 | Chains: bronze → silver → vault → vault-gold |
+| `pumpapi-lakehouse` | deployed via `databricks bundle deploy` | 1 pipeline | Lakeflow: Bronze + 3 Silver tables |
+| `pumpfun-bronze` | deployed via `databricks bundle deploy` | 1 | Triggers `pumpapi-lakehouse`, every 2 min |
+
+---
+
+### pump.fun Pipeline
+
+Independent of the dvdrental CDC pipeline above. The producer
+(`ingestion/pumpfun/`) is a standalone websocket service — it does not run
+as a Databricks job, since it needs to be always-on rather than scheduled.
+Each batch is compressed (zstd) and base64-encoded before upload:
+
+```bash
+cd ingestion/pumpfun
+cp .env.example .env   # fill in DATABRICKS_HOST / DATABRICKS_TOKEN
+docker compose up -d --build   # or: python3 -m venv venv && pip install -r requirements.txt && python -m app.main
+```
+
+See [`ingestion/pumpfun/README.md`](ingestion/pumpfun/README.md) for running
+it as a systemd service instead. Once it's landing files in the Volume, run:
+
+```bash
+cd orchestration/bundle && databricks bundle deploy -t dev
+```
+
+to deploy `pumpapi-lakehouse` — a single Lakeflow Declarative Pipeline
+(`pyspark.pipelines`, see [`pumpapi-lakehouse/README.md`](pumpapi-lakehouse/README.md))
+that does Bronze + all 3 Silver tables — and the `pumpfun-bronze` job that
+triggers it every 2 minutes. The Pipelines API doesn't support the
+`git_source` mechanism `scripts/deploy_jobs.py` uses for plain notebook
+jobs, so that script manages no pump.fun resources at all.
 
 ---
 
@@ -193,7 +247,7 @@ python3 scripts/push_secrets_to_databricks.py
 # Upload vault config to Unity Catalog Volume (required before first vault run)
 python3 scripts/upload_vault_config.py
 
-# Deploy all 5 Databricks jobs
+# Deploy all Databricks jobs (dvdrental + pumpfun)
 python3 scripts/deploy_jobs.py
 
 # Deploy and immediately trigger the full orchestrator run

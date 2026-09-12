@@ -10,6 +10,12 @@ Usage:
 Environment variables required:
     DATABRICKS_HOST   - e.g. https://dbc-xxxx.cloud.databricks.com
     DATABRICKS_TOKEN  - personal access token
+
+NOTE: this script deploys plain notebook-task jobs via the raw Jobs API +
+git_source. It does NOT deploy anything for the pump.fun pipeline —
+pumpapi-lakehouse is a Lakeflow Declarative Pipeline, and the Pipelines API
+doesn't support git_source the way Jobs does. Deploy it (and the job that
+triggers it) with `databricks bundle deploy` from orchestration/bundle/.
 """
 
 import argparse
@@ -186,6 +192,23 @@ def build_vault_gold_settings(silver_id, vault_id):
     }
 
 
+
+def ensure_job_by_name(name, settings):
+    """Create a job if it doesn't exist yet (by name), else reset it. Returns the job_id."""
+    existing = api("GET", "/jobs/list")
+    for j in existing.get("jobs", []):
+        if j["settings"]["name"] == name:
+            job_id = j["job_id"]
+            print(f"  {name} exists: {job_id}, updating...")
+            reset_job(job_id, settings)
+            return job_id
+
+    result = api("POST", "/jobs/create", json=settings)
+    job_id = result["job_id"]
+    print(f"  created {name}: {job_id}")
+    return job_id
+
+
 def build_orchestrator_settings(bronze_id, silver_id, vault_id, vault_gold_id):
     """
     Full end-to-end chain:
@@ -286,14 +309,21 @@ def main():
     )
 
     print("\n=== All jobs updated ===")
-    print(f"  bronze       : {JOB_IDS['dvdrental-bronze']}")
-    print(f"  silver       : {JOB_IDS['dvdrental-silver']}")
-    print(f"  vault        : {JOB_IDS['dvdrental-vault']}")
-    print(f"  vault-gold   : {vg_id}")
-    print(f"  orchestrator : {JOB_IDS['dvdrental-orchestrator']}")
+    print(f"  bronze         : {JOB_IDS['dvdrental-bronze']}")
+    print(f"  silver         : {JOB_IDS['dvdrental-silver']}")
+    print(f"  vault          : {JOB_IDS['dvdrental-vault']}")
+    print(f"  vault-gold     : {vg_id}")
+    print(f"  orchestrator   : {JOB_IDS['dvdrental-orchestrator']}")
     print()
     print("  Orchestrator chain:")
     print("    run_bronze → run_silver → run_vault → run_vault_gold")
+    print()
+    print("  pump.fun pipeline is independent (not chained into the orchestrator) and")
+    print("  entirely deployed via Databricks Asset Bundles, not this script:")
+    print("    pumpapi-lakehouse (Lakeflow pipeline: Bronze + 3 Silver tables)")
+    print("      <- pumpfun-bronze (job, triggers it every 2 min via pipeline_task)")
+    print("  This script deploys no pump.fun resources. Deploy them with:")
+    print("    cd orchestration/bundle && databricks bundle deploy -t dev")
 
     if args.run_silver:
         print("\n[run] triggering silver job...")

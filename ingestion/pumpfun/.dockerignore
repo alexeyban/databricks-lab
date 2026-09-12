@@ -1,0 +1,9 @@
+data/
+.env
+.env.example
+venv/
+__pycache__/
+*.pyc
+docs/
+systemd/
+README.md
