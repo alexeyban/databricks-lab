@@ -8,6 +8,16 @@ import zstandard as zstd
 
 SOURCE_PATH = "/Volumes/workspace/default/mnt/pumpapi"
 
+# Bounds how many envelope files Auto Loader reads per micro-batch. Each
+# file can hold up to 5000 events (producer default) that get fully
+# decompressed in-memory by the per-row decode_envelope UDF -- against a
+# large backlog (tens of thousands of files accumulate fast at a 2-minute
+# producer flush cadence), reading them all in one micro-batch OOMs the
+# executor ("Executor got terminated abnormally due to OUT_OF_MEMORY").
+# A triggered stream still drains the whole backlog, just across several
+# bounded micro-batches within the same pipeline update instead of one.
+MAX_FILES_PER_TRIGGER = 100
+
 # Fixed schema for the batch envelopes written by
 # ingestion/pumpfun/app/writer.py — no schema inference/evolution needed,
 # this shape is controlled by us. Each envelope's `data_b64` is a whole
@@ -56,6 +66,7 @@ def pump_events():
         spark.readStream
         .format("cloudFiles")
         .option("cloudFiles.format", "json")
+        .option("cloudFiles.maxFilesPerTrigger", str(MAX_FILES_PER_TRIGGER))
         .schema(_ENVELOPE_SCHEMA)
         .load(SOURCE_PATH)
     )
