@@ -207,7 +207,14 @@ resources:
       schedule:
         quartz_cron_expression: "0 */2 * * * ?"
         timezone_id: "UTC"
-        pause_status: UNPAUSED
+        # Paused again: bronze OOMs on the real ~54.5k-file backlog
+        # regardless of maxFilesPerTrigger/Arrow batch tuning tried so far
+        # (all fail at ~2min in), and a failed streaming micro-batch commits
+        # no offset progress -- an UNPAUSED schedule here crash-loops on the
+        # same backlog range every 2 minutes for no forward progress. Needs
+        # a real fix (likely rewriting decode_envelope's memory pattern)
+        # before re-enabling.
+        pause_status: PAUSED
       tasks:
         - task_key: run_pumpapi_lakehouse
           pipeline_task:
@@ -232,6 +239,23 @@ resources:
       continuous: false
       channel: CURRENT
       serverless: true
+      # Caps how many rows Spark ships to the Python worker per Arrow
+      # record batch. bronze_pump_events.py's decode_envelope UDF fully
+      # decompresses one envelope (up to 5000 events) into memory per row;
+      # even with cloudFiles.maxFilesPerTrigger bounding the micro-batch to
+      # 20 files, the default (10000) batch size let too many of those
+      # decompressed strings pile up in the worker at once --
+      # "[UDF_PYSPARK_ERROR.OOM] Python worker exited unexpectedly (crashed)
+      # due to running out of memory". Three different batch-size settings
+      # (100 files, 20 files, Arrow batch=5) all OOM'd at ~the same ~2min
+      # mark regardless of batch size -- pointing at the Python worker
+      # process accumulating memory (never returned to the OS) across its
+      # reused lifetime rather than any single batch being too large.
+      # spark.python.worker.reuse=false would force a fresh worker per task,
+      # but serverless pipelines reject that config outright ("not allowed
+      # for serverless pipelines") -- not a lever available here.
+      configuration:
+        spark.sql.execution.arrow.maxRecordsPerBatch: "5"
       libraries:
         - glob:
             include: ../../pumpapi-lakehouse/transformations/**
