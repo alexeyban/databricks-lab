@@ -1,0 +1,32 @@
+{
+  "session_id": "20260411_120242",
+  "session_dir": "generated/dv_sessions/20260411_120242",
+  "created_at": "2026-04-11T12:02:42.811523+00:00",
+  "completed_steps": [
+    "step1_analyzer",
+    "step2_rule_engine",
+    "step3_artifact_gen",
+    "step3b_notebook_gen",
+    "step4_doc_gen",
+    "step5_review"
+  ],
+  "current_step": "step5_review",
+  "status": "failed",
+  "metadata": {
+    "step1_analyzer": {
+      "table_count": 17
+    },
+    "step2_rule_engine": {
+      "hubs": 15,
+      "links": 20,
+      "satellites": 18
+    },
+    "step3_artifact_gen": {
+      "hubs": 15,
+      "links": 20,
+      "satellites": 18,
+      "pit_tables": 4,
+      "bridge_tables": 2
+    }
+  }
+}

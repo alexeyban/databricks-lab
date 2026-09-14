@@ -73,7 +73,7 @@ def run_cmd(cmd: list[str], *, env: dict | None = None, capture_output: bool = T
 
 def normalize_notebooks() -> list[str]:
     result = run_cmd(
-        ["python3", "runtime/normalize_notebooks.py", *NOTEBOOKS_TO_NORMALIZE]
+        ["python3", "processing/common/normalize_notebooks.py", *NOTEBOOKS_TO_NORMALIZE]
     )
     payload = json.loads(result.stdout)
     return payload.get("changed", [])
@@ -94,7 +94,7 @@ def wait_for_connect(timeout_seconds: int = 60) -> None:
 
 
 def register_connector() -> str:
-    connector_config = (REPO_ROOT / "postgres-connector.json").read_text().encode("utf-8")
+    connector_config = (REPO_ROOT / "../../ingestion/cdc/postgres-connector.json").read_text().encode("utf-8")
     request = urllib.request.Request(
         CONNECT_URL,
         data=connector_config,

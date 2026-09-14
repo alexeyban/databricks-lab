@@ -1,0 +1,19 @@
+{
+  "table_id": "language",
+  "enabled": true,
+  "bronze_table": "language",
+  "silver_table": "silver_language",
+  "cdc_contract_key": "cdc.public.language",
+  "silver_contract_key": "silver.language",
+  "checkpoint_name": "language_silver_generic",
+  "primary_keys": ["language_id"],
+  "dedupe_order_columns": ["last_update", "event_ts_ms", "bronze_offset"],
+  "merge_core_fields": ["language_id", "name", "last_update"],
+  "fk_references": [],
+  "bootstrap_hook": null,
+  "field_mappings": [
+    {"target": "language_id", "source_paths": ["after.language_id", "before.language_id"]},
+    {"target": "name", "source_paths": ["after.name", "before.name"]},
+    {"target": "last_update", "transform": "epoch_micros_to_timestamp", "source_paths": ["after.last_update", "before.last_update"]}
+  ]
+}

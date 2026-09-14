@@ -15,47 +15,86 @@ Current state of the project and prioritised next steps.
 | Schema drift detection + alerting (strict / additive_only / permissive) | Done |
 | DV 2.0 vault layer design (13 hubs, 19 links, 15 sats, 4 PITs, 2 bridges) | Done |
 | DV 2.0 generator (14-module CLI tool — analyze → review → validate → apply) | Done |
+| DV 2.0 type propagation — `column_types` in `SatDef` + `dv_model.json`; satellite DDL uses source-accurate Spark types (`DECIMAL`, `BOOLEAN`, `TIMESTAMP`); Silver→satellite casting | Done |
 | Vault notebooks generated and committed (`notebooks/vault/`) | Done |
 | `pipeline_configs/datavault/dv_model.json` — approved DV 2.0 config | Done |
 | Vault notebooks wired into `dvdrental-vault` Databricks job | Done |
-| 4-job architecture (Bronze / Silver / Vault / Orchestrator) via `deploy_job.py` | Done |
-| dbt Gold layer (gold_film, gold_rental — models + data quality tests) | Done |
+| Layer-based architecture refactor (ingestion / processing / transformation / config / orchestration / scripts) | Done |
+| 5-job architecture (Bronze / Silver / Vault / Vault-Gold / Orchestrator) via `scripts/deploy_jobs.py` | Done |
+| dbt vault models in `transformation/dbt_project/` — 15 hubs, 19 links, 15 sats, 4 PITs, 2 bridges | Done |
+| dbt Gold layer — gold_film, gold_rental + 5 new gold marts (customer_summary, inventory_status, revenue_by_store, film_popularity, staff_performance) | Done |
+| `dvdrental-vault-gold` Databricks job — NB_run_dbt wrapper, dbtRunner API, pre-committed dbt_packages | Done |
+| Orchestrator updated to 4-task chain (bronze → silver → vault → vault-gold) | Done |
+| Bulk data loader (`ingestion/generators/load_bulk_data.py`) — 1000 customers, 1000 films, 10000+ DML events | Done |
+| End-to-end orchestrator validated and passing | Done |
 | Data generators (rental/payment inserts, film attribute updates) | Done |
-| DV 2.0 type propagation — `column_types` in `SatDef` + `dv_model.json`; satellite DDL uses source-accurate Spark types (`DECIMAL`, `BOOLEAN`, `TIMESTAMP`) instead of `STRING`; Silver→satellite type casting in ingestion notebook | Done |
+| Docker operational profiles (dbt-gold, generate-cdc-traffic, deploy-databricks-jobs, upload-vault-config, kafka-to-volume) | Done |
+| PII inventory config (`pipeline_configs/pii/pii_config.json`) + Unity Catalog column tagging | Done |
+| DQ monitoring table (`monitoring.dq_results`) + `write_dq_result()` helper | Done |
+| AES-256-GCM key management (`NB_key_management_helpers`) + `monitoring.subject_key_store` | Done |
+| Silver PII encryption (per-subject DEKs in `NB_process_to_silver_generic`) | Done |
+| Silver DQ assertions (PK uniqueness, FK null rate, payment amount range) | Done |
+| Bronze quarantine table + envelope validation | Done |
+| GDPR erasure tables (`erasure_requests`, `erasure_registry`, `erasure_audit_log`) | Done |
+| Vault DQ integrity checks (Hub HK uniqueness, Link FK presence, Satellite orphan check) | Done |
+| Gold dbt test expansion (dbt_expectations, payment reconciliation, `suppress_erased_subjects` macro) | Done |
+| GDPR erasure pipeline — 6-step `NB_process_erasure` (suppress → shred → delete Bronze → validate → complete) | Done |
+| `dvdrental-dq-gdpr` job (daily VACUUM, erasure processing, SLA checks) | Done |
+| DQ + GDPR runbooks (`design/runbooks/DQ_INCIDENT_RUNBOOK.md`, `ERASURE_SOP.md`) | Done |
+| Confluence documentation generator (`runtime/confluence_doc_generator.py`) | Done |
+| Agent system: 24 specialized agents + 24 skills | Done |
+| pump.fun near-real-time ingestion — websocket producer (`ingestion/pumpfun/`, vendored from standalone `pumpapi-ingestor`), Dockerfile + Docker Compose | Done |
+| pump.fun producer — zstd-compress + base64-encode each batch into one JSON envelope per file (vs. raw JSONL per event) | Done |
+| pump.fun Bronze + Silver — `pumpapi-lakehouse`, a single Lakeflow Declarative Pipeline (`pyspark.pipelines`): decodes the compressed transport into `bronze.pump_events_raw`, then fans out into `silver.pump_events` (all events, typed), `silver.pump_tokens` (token creations), `silver.pump_transfers` (exploded transfers) | Done |
+| pump.fun deployment — `pumpapi-lakehouse` pipeline + `pumpfun-bronze` trigger job declared in `orchestration/bundle/databricks.yml` (Databricks Asset Bundles) | Done |
 
 ---
 
 ## Next steps
 
-### 1. Ingest missing Bronze tables
+### 1. Productionize Kafka connectivity
 
-Three tables (`category`, `country`, `film_actor`) are not yet in Bronze Delta because Databricks
-Serverless cannot reach the local ngrok Kafka endpoint.
-
-**Options:**
-- Use a cloud Kafka (Confluent Cloud free tier, MSK, or similar) reachable from Databricks
-- Run a Databricks cluster (not Serverless) that can access ngrok
-- Manually produce Kafka records for those tables using the Debezium REST API snapshot
-
-**Acceptance:** All 15 `workspace.bronze.*` tables exist with non-zero row counts.
-
----
-
-### 2. dbt Gold layer expansion
-
-Currently Gold has only `gold_film` and `gold_rental`. The vault layer enables richer business models.
+The `kafka-to-volume` Docker profile resolved the Databricks Serverless ngrok limitation, and all 15 Bronze tables are available. The next step is to move to cloud Kafka so ngrok is no longer needed in any environment.
 
 **Tasks:**
-- Add `gold_customer` — customer lifetime value, rental history, payment totals
-- Add `gold_inventory` — stock levels, utilisation rate per store
-- Add `gold_staff_performance` — rental/payment counts per staff member
-- Add `gold_film_popularity` — rental frequency, revenue per film
-- Extend data quality tests (`dbt test`) to cover new models
-- Document lineage: Silver → Vault → Gold for each new model
+- Migrate to cloud Kafka (Confluent Cloud free tier, MSK, or similar)
+- Update `push_secrets_to_databricks.py` with cloud broker details
+- Remove ngrok references from quickstart and architecture docs
 
 ---
 
-### 3. Vault monitoring
+### 2. DQ/GDPR job deployment
+
+The `dvdrental-dq-gdpr` job is fully designed (see `design/dq_gdpr/IMPLEMENTATION_PLAN.md`) but not yet deployed via `scripts/deploy_jobs.py`.
+
+**Tasks:**
+- Add `dvdrental-dq-gdpr` job definition to `scripts/deploy_jobs.py`
+- Wire VACUUM, erasure processing, SLA check notebooks as tasks
+- Validate end-to-end erasure pipeline
+
+---
+
+### 3. CI/CD
+
+**Tasks:**
+- GitHub Actions workflow: run `dbt build` on PR (using Databricks SQL warehouse)
+- Lint notebooks on push
+- Run unit tests for generator scripts
+
+---
+
+### 4. Databricks Asset Bundles
+
+Replace `scripts/deploy_jobs.py` with a DAB bundle for environment-aware deployments.
+
+**Tasks:**
+- Create `orchestration/bundle/databricks.yml` with all 5 jobs
+- Support dev/staging/prod targets
+- Integrate with CI/CD pipeline
+
+---
+
+### 5. Vault monitoring
 
 No observability exists for the vault layer yet.
 
@@ -67,7 +106,7 @@ No observability exists for the vault layer yet.
 
 ---
 
-### 4. Run AI classifier with live environment
+### 6. Run AI classifier with live environment
 
 The `step2b_ai_classifier` is wired in but requires `LLM_API_KEY` + `DATABRICKS_WAREHOUSE_ID`.
 
@@ -81,7 +120,7 @@ The `step2b_ai_classifier` is wired in but requires `LLM_API_KEY` + `DATABRICKS_
 
 ---
 
-### 5. Generator — re-usability for other source schemas
+### 7. Generator — re-usability for other source schemas
 
 The DV 2.0 generator is currently validated against dvdrental. Making it schema-agnostic unlocks
 its use for any new CDC source.
@@ -94,10 +133,42 @@ its use for any new CDC source.
 
 ---
 
-### 6. Data Quality + GDPR (future)
+### 8. DQ dashboards
 
-Detailed multi-phase plan in `dq_gdpr_todo.md`:
-- Phase 1: PII inventory + monitoring table
-- Phase 2: SQL-based DQ checks per Silver table
-- Phase 3: GDPR crypto-shredding (column-level encryption, subject deletion)
-- Phases 4–7: audit logs, dashboards, automated testing
+Phase 4 of `design/dq_gdpr/IMPLEMENTATION_PLAN.md`.
+
+**Tasks:**
+- Databricks SQL DQ dashboard (pass rate by layer 30d, recent failures, Bronze volume trend)
+- Databricks SQL GDPR SLA dashboard (open requests by age, completed erasures trend)
+- Export dashboard JSON to `design/dashboards/`
+
+---
+
+### 9. pump.fun — remaining action types, Vault/Gold, and DQ parity
+
+Bronze + Silver are done for `pump_events` (all events, general schema),
+`pump_tokens` (`create` events), and `pump_transfers` (`transfer` events).
+See `design/pumpfun/PUMPFUN_PIPELINE.md` and `pumpapi-lakehouse/README.md`.
+
+**Tasks:**
+- Parse remaining action types not yet in a dedicated Silver table:
+  `buy`/`sell` trades, `migrate`, `createPool`/`add`/`remove` (pool
+  liquidity state), `claimCashback`, `claimCreatorFees`
+- Decide whether pump.fun needs a Vault (Data Vault 2.0) layer or goes
+  straight Silver → Gold (no CDC deletes/updates to historize; `pump_tokens`
+  is already append-only per creation event)
+- dbt Gold marts: trading volume / momentum by token, migration funnel
+  (created → migrated → rugged), wallet-level P&L from `tradersInvolved` /
+  `pump_transfers`
+- Bronze quarantine + schema-drift monitoring parity with the dvdrental
+  pipeline (`monitoring.schema_drift_log`, `bronze.quarantine`) — including
+  handling for envelopes with an unsupported/future `codec` value
+- Un-pause the `pumpfun-bronze` job schedule (which triggers
+  `pumpapi-lakehouse`) in `orchestration/bundle/databricks.yml` once the
+  producer is running in production, and run `databricks bundle deploy` to
+  actually create the pipeline + trigger job (not yet deployed to a live
+  workspace as of this writing) — note the CLI here is the legacy
+  `databricks-cli` (0.18.0, no `bundle` subcommand); the modern unified
+  Databricks CLI is required for `databricks bundle deploy`/`validate`
+- Deploy `ingestion/pumpfun` as a long-running service (systemd unit
+  included) somewhere with reliable uptime, rather than a dev machine

@@ -1,0 +1,3 @@
+display_name: databricks-job-operator
+short_description: Run the matching agent role
+default_prompt: Use this skill to act as databricks-job-operator by following Agents/databricks-job-operator.md.

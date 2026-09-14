@@ -1,0 +1,37 @@
+name: 'cdc_gold'
+version: '1.0.0'
+profile: 'cdc_gold'
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+on-run-end:
+  - "{{ write_dq_results() }}"
+
+models:
+  cdc_gold:
+    +materialized: table
+    vault:
+      +schema: vault
+      +tags: ['vault']
+      hubs:
+        +materialized: incremental
+      links:
+        +materialized: incremental
+      satellites:
+        +materialized: incremental
+      pit:
+        +materialized: table
+      bridge:
+        +materialized: table
+    gold:
+      +schema: gold
+      +tags: ['gold']

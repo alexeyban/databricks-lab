@@ -1,6 +1,6 @@
 # Databricks CDC Lakehouse Lab
 
-End-to-end reference implementation of a Change Data Capture pipeline from the **dvdrental** PostgreSQL sample database into a Databricks medallion lakehouse (Bronze → Silver → Vault → Gold).
+End-to-end reference implementation of a Change Data Capture pipeline from the **dvdrental** PostgreSQL sample database into a Databricks medallion lakehouse (Bronze → Silver → Vault → Gold). It also includes a second, independent near-real-time pipeline that ingests live trading events from **pump.fun**, the Solana meme-coin launchpad.
 
 Agent-system inspiration was borrowed from [agency-agents](https://github.com/msitarzewski/agency-agents/).
 
@@ -8,11 +8,93 @@ Agent-system inspiration was borrowed from [agency-agents](https://github.com/ms
 
 ```
 PostgreSQL dvdrental (WAL)
-  → Debezium Connect (topics: cdc.public.* — all 15 tables)
-    → Databricks Bronze (raw Debezium envelopes in Delta tables)
-      → Databricks Silver (current-state via MERGE, schema evolution)
-        → Databricks Vault (Data Vault 2.0: Hubs / Links / Satellites / PIT / Bridge)
-          → dbt Gold (business-ready models with data quality tests)
+   → Debezium Connect (topics: cdc.public.* — all 15 tables)
+     → Databricks Bronze (raw Debezium envelopes in Delta tables)
+       → Databricks Silver (current-state via MERGE, schema evolution)
+         → Databricks Vault (Data Vault 2.0: Hubs / Links / Satellites / PIT / Bridge)
+           → dbt Gold (business-ready models with data quality tests)
+
+pump.fun (Solana on-chain trades)
+   → PumpAPI websocket → ingestion/pumpfun service (outside Databricks)
+     → batch → JSONL → zstd-compress → base64-encode → Unity Catalog Volume
+       → pumpapi-lakehouse (Lakeflow Declarative Pipeline: decode → decompress → parse)
+         → Bronze (pump_events_raw) + 3 Silver tables (events / tokens / transfers)
+```
+
+See [`docs/architecture.md`](docs/architecture.md) for the full pump.fun pipeline design.
+
+### Directory Structure
+
+```
+pumpapi-lakehouse/           # pump.fun Bronze + Silver — one Lakeflow Declarative Pipeline
+└── transformations/
+    ├── bronze_pump_events.py      ← decode zstd+base64 → workspace.bronze.pump_events_raw
+    ├── silver_pump_events.py      ← all events, typed  → silver.pump_events
+    ├── silver_pump_tokens.py      ← action=create      → silver.pump_tokens
+    └── silver_pump_transfers.py   ← action=transfer     → silver.pump_transfers
+
+ingestion/                  # Ingestion layer (Bronze)
+├── consumers/
+│   ├── NB_ingest_to_bronze.ipynb                    ← dvdrental Bronze streaming notebook
+│   ├── outdated__NB_ingest_pumpfun_to_bronze.ipynb  ← superseded, kept for reference
+│   └── outdated__NB_dlt_pumpfun_bronze.ipynb        ← superseded, kept for reference
+├── cdc/
+│   └── postgres-connector.json     ← Debezium connector config
+├── pumpfun/                 # Standalone pump.fun websocket ingestor (runs outside Databricks)
+│   ├── app/                        ← websocket client → zstd+base64 batch writer → Databricks uploader
+│   ├── Dockerfile / docker-compose.yml
+│   ├── systemd/pumpfun-ingestor.service
+│   └── README.md
+└── generators/             # Data mutation scripts
+    ├── load_generator.py           ← Rental/payment generator
+    ├── load_products_generator.py  ← Film update generator
+    └── load_bulk_data.py           ← Bulk data seeder
+
+processing/                 # All processing logic
+├── silver/
+│   ├── NB_process_to_silver_generic.ipynb        ← Metadata-driven Bronze → Silver (dvdrental)
+│   └── outdated__NB_process_pumpfun_silver.ipynb ← superseded, kept for reference
+├── vault/
+│   ├── NB_ingest_to_hubs.ipynb
+│   ├── NB_ingest_to_links.ipynb
+│   ├── NB_ingest_to_satellites.ipynb
+│   └── NB_dv_business_vault.ipynb
+└── common/                 # Shared helper notebooks
+    ├── NB_silver_metadata.ipynb
+    ├── NB_catalog_helpers.ipynb
+    ├── NB_schema_contracts.ipynb
+    └── NB_schema_drift_helpers.ipynb
+
+transformation/             # dbt (vault + gold)
+├── NB_run_dbt.ipynb        ← Databricks notebook that runs dbt (dbtRunner API)
+└── dbt_project/            ← dbt project
+    ├── dbt_project.yml
+    └── models/
+        ├── vault/          ← Incremental vault models (hubs/links/sats/pit/bridge)
+        └── gold/           ← Gold data marts
+
+config/                     # All configuration files
+├── datavault/
+│   └── dv_model.json       ← Vault config (uploaded to Unity Catalog Volume)
+├── silver/
+│   └── configs/dvdrental/  ← Per-table Silver configs (15 JSON files)
+└── .envexample
+
+orchestration/              # Jobs / workflows
+└── bundle/                 ← Databricks Asset Bundles (future)
+
+scripts/                    # CLI utilities
+├── deploy_jobs.py          ← Deploy all Databricks jobs (dvdrental + pumpfun)
+├── push_secrets_to_databricks.py
+├── upload_vault_config.py
+└── reset_checkpoints.py
+
+infra/                      # Local environment setup
+└── docker/
+    ├── docker-compose.yml
+    └── init-dvdrental.sh
+
+README.md
 ```
 
 ### Alternative: kafka-to-volume (no ngrok required)
@@ -49,46 +131,65 @@ docker compose --profile kafka-to-volume up -d kafka-to-volume
 
 | Table | Changes captured |
 |-------|-----------------|
-| `public.film` | Updates: rental_rate, rental_duration, replacement_cost |
-| `public.film_actor` | Junction: film ↔ actor |
-| `public.film_category` | Junction: film ↔ category |
-| `public.inventory` | Film copies per store |
-| `public.rental` | Inserts: new rentals; Updates: return_date set on return |
-| `public.payment` | Inserts: payments for completed rentals |
+| `film` | rental_rate, rental_duration, replacement_cost |
+| `film_actor` | Junction: film ↔ actor |
+| `film_category` | Junction: film ↔ category |
+| `inventory` | Film copies per store |
+| `rental` | New rentals, return_date updates |
+| `payment` | Payment inserts |
 
-### Databricks Unity Catalog Tables
+---
 
-| Layer | Table | Merge / hash key |
-|-------|-------|-----------------|
-| Bronze | `workspace.bronze.*` (15 tables) | — |
-| Silver | `workspace.silver.silver_*` (15 tables) | entity PK |
-| Vault | `workspace.vault.hub_*` (13 hubs) | SHA-256 hash key |
-| Vault | `workspace.vault.lnk_*` (19 links) | composite hash key |
-| Vault | `workspace.vault.sat_*` (15 satellites) | hub hash key + load_date |
-| Vault | `workspace.vault.pit_*` (4 PIT tables) | hub hash key + snapshot_date |
-| Vault | `workspace.vault.brg_*` (2 bridge tables) | — |
-| Gold | `workspace.gold.gold_film` | film_id |
-| Gold | `workspace.gold.gold_rental` | rental_id |
-| Monitoring | `workspace.monitoring.schema_drift_log` | — |
-| Monitoring | `workspace.monitoring.dq_results` | — |
-| Monitoring | `workspace.monitoring.pii_column_registry` | — |
-| Monitoring | `workspace.monitoring.subject_key_store` | — |
-| Monitoring | `workspace.monitoring.erasure_requests` | — |
-| Monitoring | `workspace.monitoring.erasure_registry` | — |
-| Monitoring | `workspace.monitoring.erasure_audit_log` | — |
-| Monitoring | `workspace.monitoring.vault_load_log` | — |
-| Bronze | `workspace.bronze.quarantine` | — |
+### Databricks Jobs
 
-## Quick Start
+| Job | ID | Tasks | Description |
+|-----|----|-------|-------------|
+| `dvdrental-bronze` | 325293262130713 | 1 | Kafka → Bronze Delta (availableNow trigger) |
+| `dvdrental-silver` | 1099814608698427 | 15 | Bronze → Silver MERGE, 3 batches of 5 |
+| `dvdrental-vault` | 950203691556666 | 4 | Hubs → Links+Sats → Business Vault |
+| `dvdrental-vault-gold` | 83436339832760 | 1 | dbt build vault+gold via NB_run_dbt |
+| `dvdrental-orchestrator` | 684287727358557 | 4 | Chains: bronze → silver → vault → vault-gold |
+| `pumpapi-lakehouse` | deployed via `databricks bundle deploy` | 1 pipeline | Lakeflow: Bronze + 3 Silver tables |
+| `pumpfun-bronze` | deployed via `databricks bundle deploy` | 1 | Triggers `pumpapi-lakehouse`, every 2 min |
 
-### 1. Local Infrastructure
+---
+
+### pump.fun Pipeline
+
+Independent of the dvdrental CDC pipeline above. The producer
+(`ingestion/pumpfun/`) is a standalone websocket service — it does not run
+as a Databricks job, since it needs to be always-on rather than scheduled.
+Each batch is compressed (zstd) and base64-encoded before upload:
 
 ```bash
-# Start the full CDC stack (Zookeeper, Kafka, PostgreSQL 15, Debezium Connect,
-# Schema Registry, Kafka UI)
+cd ingestion/pumpfun
+cp .env.example .env   # fill in DATABRICKS_HOST / DATABRICKS_TOKEN
+docker compose up -d --build   # or: python3 -m venv venv && pip install -r requirements.txt && python -m app.main
+```
+
+See [`ingestion/pumpfun/README.md`](ingestion/pumpfun/README.md) for running
+it as a systemd service instead. Once it's landing files in the Volume, run:
+
+```bash
+cd orchestration/bundle && databricks bundle deploy -t dev
+```
+
+to deploy `pumpapi-lakehouse` — a single Lakeflow Declarative Pipeline
+(`pyspark.pipelines`, see [`pumpapi-lakehouse/README.md`](pumpapi-lakehouse/README.md))
+that does Bronze + all 3 Silver tables — and the `pumpfun-bronze` job that
+triggers it every 2 minutes. The Pipelines API doesn't support the
+`git_source` mechanism `scripts/deploy_jobs.py` uses for plain notebook
+jobs, so that script manages no pump.fun resources at all.
+
+---
+
+## Local Infrastructure
+
+```bash
+# Start the full CDC stack (Zookeeper, Kafka, PostgreSQL 15, Debezium Connect, Schema Registry, Kafka UI)
 docker compose up -d
 
-# Wait ~30s for Kafka Connect, then register the Debezium connector
+# Register the Debezium connector (wait ~30s for Kafka Connect to be ready)
 curl -X POST http://localhost:8083/connectors \
   -H 'Content-Type: application/json' \
   --data @postgres-connector.json
@@ -98,570 +199,84 @@ curl http://localhost:8083/connectors/postgres-connector/status
 
 # Kafka UI
 open http://localhost:8085
-```
 
-**Alternative (no ngrok required):** If Databricks Serverless cannot reach your local Kafka,
-use the kafka-to-volume container to upload CDC events to a Volume landing zone:
-
-```bash
+# Alternative: kafka-to-volume (no ngrok needed for Serverless workspaces)
 docker compose --profile kafka-to-volume up -d kafka-to-volume
 ```
 
-PostgreSQL initialises from `docker/init-dvdrental.sh` on first start — restores the full
-dvdrental dataset (~1000 films, ~16k rentals, ~14k payments) and creates the logical
-replication publication.
+---
 
-### 2. Python Setup
+## Python Setup
 
 ```bash
 pip install -r requirements.txt
 
-# Copy and fill in your Databricks credentials
+# Copy and fill in Databricks credentials
 cp .envexample .env
+# Edit .env: set DATABRICKS_HOST and DATABRICKS_TOKEN
 ```
 
-### 3. Upload Vault Config
+---
 
-The vault notebooks read `dv_model.json` from a Unity Catalog Volume. Upload it once:
-
-```bash
-set -a && source .env && set +a
-python3 scripts/upload_vault_config.py
-```
-
-### 4. Upload PII Config
+## Data Generators
 
 ```bash
-# pii_config.json must be in the Volume alongside dv_model.json
-python3 scripts/upload_vault_config.py   # uploads dv_model.json
-# Then upload pii_config manually or add to upload script:
-# databricks fs cp pipeline_configs/pii/pii_config.json \
-#   dbfs:/Volumes/workspace/default/mnt/pipeline_configs/pii/pii_config.json
-```
+# Bulk seed: inserts 1000 customers, 1000 films, 10000+ DML events (run once before pipeline)
+python3 ingestion/generators/load_bulk_data.py
 
-### 5. Deploy Databricks Jobs
+# Film generator (updates rental_rate, rental_duration, replacement_cost on existing films)
+python3 ingestion/generators/load_products_generator.py
 
-```bash
-set -a && source .env && set +a
-
-# Push Kafka bootstrap to Databricks secret scope 'dvdrental' first
-python3 scripts/push_secrets_to_databricks.py
-
-# Deploy all 5 jobs (Bronze / Silver / Vault / Orchestrator / DQ-GDPR)
-python3 scripts/deploy_job.py
-
-# Deploy with Slack alerting + run immediately
-python3 scripts/deploy_job.py --webhook-url https://hooks.slack.com/... --run
-```
-
-This creates/updates five Databricks jobs:
-
-| Job | What it does | Schedule |
-|-----|-------------|----------|
-| `dvdrental-bronze` | Kafka → 15 Bronze Delta tables (streaming) | on-demand |
-| `dvdrental-silver` | 15 parallel Bronze → Silver tasks (generic notebook) | on-demand |
-| `dvdrental-vault` | Hubs → Links + Satellites (parallel) → Business Vault | on-demand |
-| `dvdrental-orchestrator` | Chains the three jobs above in sequence | on-demand |
-| `dvdrental-dq-gdpr` | VACUUM Bronze + process erasure requests + SLA checks | daily 02:00 UTC |
-
-### 6. Generate CDC Traffic
-
-```bash
-# Film updates (rental_rate, rental_duration, replacement_cost)
-python3 generators/load_products_generator.py
-
-# New rentals, returns, and payments
-python3 generators/load_generator.py
+# Rental + payment generator (new rentals, film returns, payments)
+python3 ingestion/generators/load_generator.py
 
 # Optional env vars: ITERATIONS, SLEEP_MIN, SLEEP_MAX
 # DB env vars: PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD
 ```
 
-### 7. dbt Gold Layer
+---
 
-```bash
-cd cdc_gold
-dbt deps           # install dbt_utils + dbt_expectations packages
-dbt debug          # verify connection
-dbt build          # run models + tests (writes results to monitoring.dq_results)
-dbt test           # data quality tests only
-```
-
-### 8. Generate Confluence Documentation
-
-```bash
-python3 runtime/confluence_doc_generator.py [output_dir]
-```
-
-Outputs:
-- `docs/confluence_html.html` — HTML for Confluence paste
-- `docs/confluence_markdown.md` — Markdown for Confluence
-- `docs/diagrams/*.mmd` — Mermaid diagrams for architecture docs
-
-### 9. Normalize Notebooks
-
-After editing notebook JSON directly, normalize formatting:
-
-```bash
-python3 runtime/normalize_notebooks.py <notebook> [<notebook> ...]
-```
-
-## Repository Layout
-
-```
-docker-compose.yml              Local CDC stack definition
-postgres-connector.json         Debezium PostgreSQL connector config
-docker/init-dvdrental.sh        PostgreSQL init: restore dvdrental, create publication
-
-generators/
-  load_generator.py             Rental inserts, returns, payment inserts
-  load_products_generator.py    Film attribute updates
-  load_reference_generator.py  Static reference data loader
-  dv_generator/                 DV 2.0 meta-tool (analyze → review → apply)
-
-runtime/
-  databricks_client.py          Databricks REST API client
-  confluence_doc_generator.py  Generates Confluence-ready docs with Mermaid diagrams
-  normalize_notebooks.py        Normalizes notebooks after JSON edits
-
-notebooks/
-  bronze/NB_ingest_to_bronze.ipynb              Kafka → Bronze Delta (topic pattern cdc.public.*)
-  silver/NB_process_to_silver_generic.ipynb     Metadata-driven Bronze → Silver (all 15 tables)
-  silver/outdated__NB_process_to_silver.ipynb    Legacy: rental-specific MERGE (reference only)
-  silver/outdated__NB_process_products_silver.ipynb  Legacy: film-specific MERGE (reference only)
-  silver/outdated__NB_process_payment_silver.ipynb   Legacy: payment-specific MERGE (reference only)
-  vault/NB_dv_metadata.ipynb                    DV 2.0 config parser + hash key / DDL helpers
-  vault/NB_ingest_to_hubs.ipynb                 Silver → 13 Hub tables (SHA-256 insert-only)
-  vault/NB_ingest_to_links.ipynb                Silver → 19 Link tables (insert-only)
-  vault/NB_ingest_to_satellites.ipynb           Silver → 15 Satellites (append-only, DIFF_HK)
-  vault/NB_dv_business_vault.ipynb              PIT tables + Bridge tables
-  helpers/NB_catalog_helpers.ipynb              Table/schema creation utilities + DQ/monitoring DDL
-  helpers/NB_schema_drift_helpers.ipynb         Schema drift detection + alerting (DQ + GDPR SLA)
-  helpers/NB_schema_contracts.ipynb             Expected schema definitions (Bronze/Silver/Gold)
-  helpers/NB_silver_metadata.ipynb              Silver metadata loader (pipeline_configs/*.json)
-  helpers/NB_reset_tables.ipynb                 Drop all tables + clear checkpoints
-  helpers/NB_pii_catalog_helpers.ipynb          Apply Unity Catalog PII tags + populate pii_column_registry
-  helpers/NB_key_management_helpers.ipynb       AES-256-GCM DEK management (get/create/encrypt/decrypt/shred)
-  helpers/NB_process_erasure.ipynb              6-step GDPR crypto-shredding erasure pipeline
-  helpers/NB_confluence_generator.ipynb         Generates Confluence documentation
-
-pipeline_configs/
-  silver/dvdrental/*.json         15 Silver table configs (field mappings, PKs, transforms)
-  silver/orders.json              Demo: order processing config
-  silver/products.json           Demo: product catalog config
-  datavault/dv_model.json         Approved DV 2.0 model (13 hubs, 19 links, 15 sats, 4 PITs, 2 bridges)
-  pii/pii_config.json             PII column inventory: sensitivity, subject_id_col, encrypt flag
-
-scripts/
-  deploy_job.py                   Create/update all 5 Databricks jobs; optionally trigger run
-  reset_checkpoints.py            Delete Silver/Bronze streaming checkpoints before E2E reload
-  upload_vault_config.py          Upload dv_model.json to Unity Catalog Volume (run once)
-  patch_dv_model_types.py         One-off migration: inject column_types into all 15 satellites in dv_model.json
-  smoke_test_vault.py             Validate vault row counts via SQL execution API
-  push_secrets_to_databricks.py  Push Kafka bootstrap + DEK secrets to Databricks Secret Scope
-  kafka_to_volume.py              Uploads Kafka events to Volume landing zone (cloud Kafka alternative)
-  setup_pii_secrets.py            Sets up PII encryption secrets in Databricks
-  apply_vault_comments.py        Adds table/column comments to vault tables
-
-dq_queries/silver/               Reference SQL for ad-hoc DQ validation
-  check_rental_pk.sql            Rental PK uniqueness
-  check_customer_pk.sql          Customer PK uniqueness
-  check_film_pk.sql              Film PK uniqueness
-  check_rental_fk_customer.sql   Rental → customer FK null rate
-  check_payment_amount.sql       Payment amount range [0.99, 11.99]
-
-Agents/                          24 specialized agent role definitions (data-engineer, architect, etc.)
-skills/                          24 reusable skill definitions (docker-databricks-lab-ops, job-operator, etc.)
-
-design/
-  dq_gdpr/IMPLEMENTATION_PLAN.md  Full 4-phase DQ + GDPR implementation plan
-  runbooks/DQ_INCIDENT_RUNBOOK.md DQ failure triage + escalation guide
-  runbooks/ERASURE_SOP.md         GDPR erasure step-by-step SOP (30-day SLA)
-
-cdc_gold/                         dbt project for Gold models
-```
-
-## Notebooks
-
-### Bronze — NB_ingest_to_bronze
-
-Structured streaming from Kafka → Bronze Delta tables.
-
-- Topic pattern: `cdc.public.*` (dynamically names target table from topic)
-- Parameters: `KAFKA_BOOTSTRAP`, `TOPIC_PATTERN`, `CATALOG`, `BRONZE_SCHEMA`, `CHECKPOINT_PATH`
-- Output: one `workspace.bronze.<table>` per source table
-
-### Silver — NB_process_to_silver_generic
-
-Single metadata-driven notebook that handles all 15 tables. Each Silver task in the
-Databricks job calls this notebook with a different `TABLE_ID`.
-
-Parameters: `TABLE_ID`, `CATALOG`, `BRONZE_SCHEMA`, `SILVER_SCHEMA`, `CHECKPOINT_ROOT`,
-`MONITORING_SCHEMA`, `SCHEMA_POLICY`, `ALERT_CHANNEL`, `WEBHOOK_URL`, `RUN_BOOTSTRAP_HOOKS`
-
-Per-table config is loaded from `pipeline_configs/silver/dvdrental/<TABLE_ID>.json` and
-defines: Bronze/Silver table names, CDC + Silver schema contracts, primary keys, dedupe
-ordering, field mappings, and optional transforms.
-
-**Transforms supported:**
-
-| Transform | Use case |
-|-----------|---------|
-| `plain` | Direct column copy (coalesce after/before) |
-| `epoch_micros_to_timestamp` | Debezium microsecond timestamps → Spark timestamp |
-| `decimal_from_debezium_bytes` | Debezium Base64-encoded NUMERIC bytes → decimal |
-| `decimal_from_json_paths` | Variable-scale NUMERIC from JSON structure |
-
-Features:
-- Schema drift detection + alerting per `SCHEMA_POLICY`
-- Graceful skip when Bronze table doesn't exist yet
-- Deduplication within each micro-batch via `row_number()` window
-- MERGE keyed by `primary_keys` from the table config
-
-### Vault — NB_dv_metadata
-
-Loads `dv_model.json` from a Unity Catalog Volume and exposes shared helpers:
-
-- `load_model(path)` — reads the DV 2.0 config JSON; accepts absolute Volume paths or relative (resolved under `/Volumes/workspace/default/mnt/`)
-- `generate_hash_key(bk_cols)` — SHA-256 hash key expression
-- `generate_diff_hash(tracked_cols)` — NULL-safe DIFF_HK for satellite change detection
-- DDL helpers: `create_hub_table`, `create_link_table`, `create_sat_table`, `create_pit_table`, `create_bridge_table`
-
-`create_sat_table()` maps each satellite's `column_types` to Spark SQL DDL types via a built-in `_SPARK_TYPE` dictionary. Payload columns receive their source-accurate types rather than a blanket `STRING`:
-
-| Canonical type | Spark SQL DDL |
-|----------------|--------------|
-| `integer` / `bigint` | `BIGINT` |
-| `smallint` | `INT` |
-| `varchar` / `text` | `STRING` |
-| `numeric` / `decimal` | `DECIMAL(18,6)` |
-| `timestamp` | `TIMESTAMP` |
-| `boolean` | `BOOLEAN` |
-| `date` | `DATE` |
-
-### Vault — NB_ingest_to_hubs
-
-Insert-only MERGE from Silver → 13 Hub tables. Watermarked by `LOAD_DATE`.
-
-- Pattern: `MERGE INTO vault.hub_X USING source ON HK_X = HK_X WHEN NOT MATCHED THEN INSERT`
-
-### Vault — NB_ingest_to_links
-
-Insert-only MERGE from Silver → 19 Link tables. Runs after Hubs are populated.
-
-- Composite hash key from all FK columns
-- Each link record references ≥ 2 hub hash keys
-
-### Vault — NB_ingest_to_satellites
-
-Append-only insert from Silver → 15 Satellite tables using DIFF_HK change detection.
-
-- `LEFT JOIN` latest DIFF_HK per hub key; insert only where DIFF_HK changed or is new
-- History preserved by `LOAD_DATE` — no end-dating
-- Each tracked column is **cast to its declared satellite DDL type** (from `column_types` in `dv_model.json`) before appending, preventing `DELTA_FAILED_TO_MERGE_FIELDS` errors when the Silver source type differs from the satellite schema (e.g. Silver stores `active` as `LONG`, satellite declares it `BOOLEAN`)
-
-### Vault — NB_dv_business_vault
-
-Builds PIT (Point-in-Time) and Bridge tables from the vault layer.
-
-- **PIT tables** (4): daily snapshot spine for HUB_FILM, HUB_RENTAL, HUB_CUSTOMER, HUB_PAYMENT
-- **Bridge tables** (2): BRG_RENTAL_FILM (rental → inventory → film), BRG_FILM_CAST (film → actor)
-
-### Helpers
-
-- **NB_catalog_helpers**: `ensure_schema_exists`, `build_merge_clauses`, `execute_merge`, `ensure_monitoring_tables`, `write_dq_result`, `ensure_bronze_quarantine`, `set_bronze_ttl`, `check_volume_anomaly`, `ensure_vault_load_log`
-- **NB_schema_drift_helpers**: `validate_schema_with_policy`, `SchemaDriftException`, `alert_dq_failure`, `alert_erasure_sla_risk`, webhook/email/log alerting
-- **NB_schema_contracts**: expected Bronze/Silver schemas for all 15 tables
-- **NB_silver_metadata**: `get_silver_table_config(table_id)` — loads per-table config from `pipeline_configs/silver/dvdrental/`
-- **NB_reset_tables**: drops all Bronze/Silver/Gold/monitoring tables + clears checkpoints
-- **NB_pii_catalog_helpers**: loads `pii_config.json`, applies UC column tags, writes `monitoring.pii_column_registry`
-- **NB_key_management_helpers**: `get_or_create_dek`, `get_dek_map`, `encrypt_value`, `decrypt_value`, `shred_subject`
-- **NB_process_erasure**: 6-step GDPR erasure (suppress → shred → delete Bronze → validate → complete)
-
-## Schema Evolution
-
-Silver tables support automatic schema evolution — new columns in Debezium events are detected and added:
-
-1. `.option("mergeSchema", "true")` on streaming writes
-2. MERGE statements rebuilt dynamically from the current live table schema
-3. All changes logged to `workspace.monitoring.schema_drift_log`
-
-## Schema Drift Detection
-
-Configurable per-layer policy with alerting.
-
-### Policies
-
-| Policy | Behaviour | Default layer |
-|--------|-----------|--------------|
-| `permissive` | Log only, never block | Bronze |
-| `additive_only` | Allow new columns, block removals/type changes | Silver |
-| `strict` | Block on any schema change | Gold |
-
-### Alert Channels
-
-`log` · `webhook` (Slack/Teams) · `email` (SMTP) · `all`
-
-### Monitoring Query
-
-```sql
-SELECT * FROM workspace.monitoring.schema_drift_log
-ORDER BY detected_at DESC
-LIMIT 10;
-```
-
-## Databricks Jobs
-
-Defined and deployed via `scripts/deploy_job.py`. Four jobs, each independently runnable:
-
-### dvdrental-bronze
-
-Kafka → Bronze Delta streaming. Requires Kafka to be reachable (local dev: use ngrok).
-
-**Parameters:** `KAFKA_BOOTSTRAP`, `TOPIC_PATTERN`, `CATALOG`, `BRONZE_SCHEMA`, `CHECKPOINT_PATH`
-
-### dvdrental-silver
-
-15 parallel tasks, each calling `NB_process_to_silver_generic` with a different `TABLE_ID`.
-Gracefully skips tables whose Bronze Delta does not yet exist.
-
-**Parameters (per task):** `TABLE_ID`, `CATALOG`, `BRONZE_SCHEMA`, `SILVER_SCHEMA`,
-`CHECKPOINT_ROOT`, `MONITORING_SCHEMA`, `SCHEMA_POLICY`
-
-### dvdrental-vault
-
-Sequential DAG: Hubs → (Links ‖ Satellites) → Business Vault.
-
-**Parameters (all tasks):** `CATALOG`, `VAULT_SCHEMA`, `MODEL_PATH`
-
-`MODEL_PATH` defaults to `/Volumes/workspace/default/mnt/pipeline_configs/datavault/dv_model.json`.
-Upload the model file with `scripts/upload_vault_config.py` before the first run.
-
-### dvdrental-orchestrator
-
-Chains the three jobs above: Bronze → Silver → Vault. No git source — uses `run_job_task`.
-
-### dvdrental-dq-gdpr
-
-Daily maintenance job (02:00 UTC). Three independent tasks:
-- `vacuum_bronze_tables` — VACUUM all 15 Bronze tables, RETAIN 720 hours
-- `process_erasure_requests` — run `NB_process_erasure` for all pending requests
-- `check_erasure_sla` — alert on erasure requests older than 25 days (30-day SLA window)
-
-### Deploy / redeploy
+## Deployment
 
 ```bash
 set -a && source .env && set +a
 
-# Deploy only (or update existing jobs)
-python3 scripts/deploy_job.py
-
-# Deploy with Slack webhook + fresh checkpoints + run immediately
-python3 scripts/deploy_job.py --webhook-url https://hooks.slack.com/... \
-  --checkpoint-suffix v4 --run
-```
-
-### E2E Test Reset (full reload from scratch)
-
-Silver uses Delta streaming with checkpoints stored in a Unity Catalog Volume.
-When Bronze tables are truncated and reloaded (e.g. after a `docker compose down -v`),
-the checkpoint is ahead of the new data and Silver sees 0 new rows.
-**Always delete checkpoints before a test full-reload.**
-
-```bash
-set -a && source .env && set +a
-
-# See what would be deleted (no changes)
-python3 scripts/reset_checkpoints.py --checkpoint-suffix v8 --dry-run
-
-# Delete Silver checkpoints only
-python3 scripts/reset_checkpoints.py --checkpoint-suffix v8
-
-# Delete Silver + Bronze Auto Loader checkpoints (full E2E reset)
-python3 scripts/reset_checkpoints.py --checkpoint-suffix v8 --include-bronze
-
-# Delete ALL checkpoint suffixes found on the Volume
-python3 scripts/reset_checkpoints.py --all-suffixes --include-bronze
-
-# Reset checkpoints and immediately trigger the orchestrator
-python3 scripts/reset_checkpoints.py --checkpoint-suffix v8 --include-bronze --run
-```
-
-Typical E2E test flow:
-
-```bash
-# 1. Restart Docker CDC stack
-docker compose down -v && docker compose up -d
-curl -X POST http://localhost:8083/connectors -H 'Content-Type: application/json' \
-  --data @postgres-connector.json
-
-# 2. Start kafka-to-volume to fill the Bronze landing zone
-docker compose --profile kafka-to-volume up -d kafka-to-volume
-
-# 3. Reset checkpoints so Silver re-reads all Bronze data from version 0
-set -a && source .env && set +a
-python3 scripts/reset_checkpoints.py --checkpoint-suffix v8 --include-bronze
-
-# 4. Deploy and run the full pipeline
-python3 scripts/deploy_job.py --checkpoint-suffix v8
-python3 scripts/reset_checkpoints.py --checkpoint-suffix v8 --run
-```
-
-## ngrok for Local Development
-
-Databricks Serverless cannot reach a local Kafka directly. Use the built-in skill to
-set up an ngrok TCP tunnel and push the bootstrap address to Databricks secrets:
-
-```bash
-# Sets up ngrok tunnel, updates .env, pushes secrets, and redeploys Bronze job
-bash .claude/skills/ngrok-kafka-setup/scripts/setup_ngrok_kafka.sh
-```
-
-The Bronze notebook reads `kafka-external-host` and `kafka-external-port` from the
-`dvdrental` Databricks secret scope at runtime — no bootstrap address in job parameters.
-
-To push updated secrets manually:
-```bash
-set -a && source .env && set +a
+# Push Kafka credentials to Databricks secret scope
 python3 scripts/push_secrets_to_databricks.py
+
+# Upload vault config to Unity Catalog Volume (required before first vault run)
+python3 scripts/upload_vault_config.py
+
+# Deploy all Databricks jobs (dvdrental + pumpfun)
+python3 scripts/deploy_jobs.py
+
+# Deploy and immediately trigger the full orchestrator run
+python3 scripts/deploy_jobs.py --run-orchestrator
 ```
 
-## Secret Hygiene
+---
 
-Do not commit real credentials. Use `.envexample` as the template:
+## dbt (Vault + Gold Layer)
 
 ```bash
-cp .envexample .env
-# edit .env with real DATABRICKS_HOST and DATABRICKS_TOKEN
+# Local
+cd transformation/dbt_project
+dbt debug          # verify connection
+dbt build --select vault gold   # run vault + gold models + tests
+dbt test           # data quality tests only
+
+# On Databricks: run transformation/NB_run_dbt.ipynb (uses dbtRunner API, no subprocess)
 ```
 
-`.env`, `.databrickscfg`, and generated logs are git-ignored.
+---
 
-## DV 2.0 Generator
+## Run the Pipeline
 
-`generators/dv_generator/` is a **meta-tool** that automates DV 2.0 model creation from any Silver layer schema. It replaces manual vault design with a 7-step pipeline:
+1. Start local infrastructure: `docker compose up -d`
+2. Register the Debezium connector
+3. Seed bulk data: `python3 ingestion/generators/load_bulk_data.py`
+4. Deploy jobs: `python3 scripts/deploy_jobs.py`
+5. Trigger orchestrator from the Databricks UI or:
+   `python3 scripts/deploy_jobs.py --run-orchestrator`
 
-```
-step1: schema analysis    → 01_schema_analysis.json   (infers column types from Silver configs)
-step2: heuristic rules    → 02_classification.json     (SatDef carries column_types per tracked column)
-step2b: AI classifier     → 02b_merged_classification.json  (optional, needs LLM env)
-step3: artifact gen       → 03_dv_model_draft.json + query_templates/  (COLUMN_TYPES constant per sat)
-step3b: notebook gen      → notebooks/vault/*.ipynb
-step4: documentation      → 04_diagram.drawio + 04_documentation.md
-step5: human review       → 05_review_notebook.ipynb  ← PAUSE
-step6: validation         → 06_validation_report.json
-step7: apply              → pipeline_configs/datavault/dv_model.json + notebooks/vault/
-```
-
-Each satellite in the generated `dv_model.json` carries a `column_types` dict mapping tracked column names to their inferred canonical types (`integer`, `numeric`, `boolean`, `timestamp`, `varchar`). The type inference uses Silver field mapping transforms first, then column-name heuristics. Run `scripts/patch_dv_model_types.py` to back-fill `column_types` into an existing `dv_model.json` that pre-dates this feature.
-
-### Quick start
-
-```bash
-# Full run — analyzes Silver configs, generates notebooks, pauses for review
-python -m generators.dv_generator.main --analyze \
-  --config-dir pipeline_configs/silver/dvdrental --no-ai
-
-# After reviewing 05_review_notebook.ipynb in Jupyter:
-python -m generators.dv_generator.main --resume <session_id> \
-  --from-step step6_validator
-
-# With AI semantic classifier (requires LLM env vars):
-python -m generators.dv_generator.main --analyze \
-  --config-dir pipeline_configs/silver/dvdrental
-```
-
-### Key files
-
-| File | Description |
-|------|-------------|
-| `pipeline_configs/datavault/dv_model.json` | Final approved DV 2.0 config (includes `column_types` per satellite) |
-| `pipeline_configs/silver/dvdrental/*.json` | Silver table configs (15 files) |
-| `scripts/patch_dv_model_types.py` | One-off migration to inject `column_types` into `dv_model.json` from Silver configs |
-| `design/dv2/DV2_VAULT_LAYER_PLAN.md` | Full vault design (hubs/links/sats/PITs/bridges) |
-| `design/dv2/DV2_GENERATOR_DESIGN.md` | Generator architecture decisions |
-| `design/dv2/IMPLEMENTATION_LOG.md` | Module completion status |
-
-## Data Quality + GDPR
-
-Full implementation plan: `design/dq_gdpr/IMPLEMENTATION_PLAN.md`
-
-### Data Quality
-
-DQ checks run automatically at every layer and write results to `workspace.monitoring.dq_results`:
-
-| Layer | Checks | On FAIL |
-|-------|--------|---------|
-| Bronze | Envelope validation (JSON/op/freshness), volume anomaly detection | Bad rows → `bronze.quarantine`, Slack WARN |
-| Silver | PK uniqueness, rental FK null rate, payment amount range | Exception raised, Slack alert |
-| Vault | Hub HK uniqueness, Link FK presence, Satellite orphan check, PIT/Bridge row counts | Exception raised, Slack alert |
-| Gold | dbt tests (unique, not_null, accepted_values, dbt_expectations), Silver ↔ Gold payment reconciliation | dbt failure, written to dq_results |
-
-```sql
--- Recent DQ failures
-SELECT layer, table_name, check_name, status, observed_value, message, checked_at
-FROM workspace.monitoring.dq_results
-WHERE status IN ('FAIL', 'WARN')
-  AND checked_at >= current_timestamp() - INTERVAL 24 HOURS
-ORDER BY checked_at DESC;
-```
-
-### GDPR Crypto-Shredding
-
-PII columns in `silver_customer`, `silver_staff`, and `silver_address` are encrypted with per-subject AES-256-GCM DEKs at the Silver merge step. Erasure is performed via key deletion — ciphertext becomes permanently unreadable.
-
-> **Dev warning:** DEKs use Databricks secret scopes. Replace with Azure Key Vault / AWS KMS for production.
-
-**Erasure flow:**
-
-```
-INSERT INTO monitoring.erasure_requests (request_id, subject_id, subject_type, ...)
-→ Run NB_process_erasure with DRY_RUN=true  (review)
-→ Run NB_process_erasure with DRY_RUN=false (execute 6 steps)
-→ Verify monitoring.erasure_audit_log has 6 rows
-→ Verify Gold excludes subject (dbt run)
-```
-
-See `design/runbooks/ERASURE_SOP.md` for the full SOP.
-
-**Monitoring tables:**
-
-| Table | Purpose |
-|-------|---------|
-| `monitoring.pii_column_registry` | PII inventory (table, column, sensitivity, encrypt flag) |
-| `monitoring.subject_key_store` | DEK lifecycle tracking (created_at, shredded_at) |
-| `monitoring.erasure_requests` | Incoming GDPR erasure requests |
-| `monitoring.erasure_registry` | Suppressed subjects (Gold anti-join filter) |
-| `monitoring.erasure_audit_log` | 6-step audit trail per erasure |
-
-## Agent System
-
-This repository includes a local agent/skill catalog for specialized data engineering tasks.
-
-**Agents** (`/Agents/`): 24 markdown files defining specialized agent personalities:
-- `engineering-data-engineer.md` — CDC, dbt, pipeline, and data reliability work
-- `databricks_architect.md` — Databricks and lakehouse architecture
-- `lakehouse_data_architect.md` — Bronze/Silver/Gold contracts and model boundaries
-- `databricks-notebook-publisher.md` — publish local notebooks to Databricks workspaces
-- `databricks-job-operator.md` — run jobs, capture run_id, track terminal state
-- `databricks-notebook-remediator.md` — diagnose failed notebook runs and fix forward
-- `databricks-data-quality-analyst.md` — validate output quality beyond job success
-- `databricks-dq-automation.md` — run stored SQL DQ checks after pipeline updates
-- `spark_performance_engineer.md` — Spark tuning and execution-performance review
-- And 15 more in `/Agents/`
-
-**Skills** (`/skills/`): 24 reusable skill definitions for operational workflows:
-- `docker-databricks-lab-ops/` — primary operational workflow for stack bring-up, connector registration, generators, ngrok/Kafka wiring, Databricks runs, and smoke tests
-- `engineering-data-engineer/` — data-engineer specialization
-- `lakehouse-data-architect/` — medallion design and CDC model decisions
-- `databricks-notebook-publisher/` — publish notebooks to workspace
-- `databricks-job-operator/` — execute and monitor Databricks jobs
-- `databricks-notebook-remediator/` — diagnose and fix notebook failures
-- `databricks-data-quality-analyst/` — validate table/notebook outputs
-- `databricks-dq-automation/` — run repo-managed SQL DQ checks
-- `confluence-documentation-generator/` — generate Confluence-ready docs with Mermaid diagrams
-- And 15 more in `/skills/`
-
-The full catalog with recommended sequencing and role responsibilities is documented in `AGENTS.md`.
-
-See `AGENT_PROMPT_EXAMPLES.md` for prompt templates.
+The orchestrator runs: **Bronze → Silver → Vault → Vault-Gold (dbt)**

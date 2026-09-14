@@ -1,6 +1,10 @@
 # DQ + GDPR Implementation Plan
-**Repo:** databricks-lab / alexeyban  
-**Source:** `dq_gdpr_todo.md`
+**Repo:** databricks-lab / alexeyban
+
+> **Status (2026-04-10): Phases 1–3 fully implemented. Phase 4 (dashboards) pending.**
+>
+> All notebooks, scripts, job tasks, and runbooks from Phases 1–3 are committed.
+> See `ROADMAP.md` for the remaining Phase 4 dashboard work.
 
 ---
 
@@ -25,7 +29,7 @@ stored encrypted in a key vault; on erasure, delete the key. Immediate suppressi
 
 ---
 
-## Phase 1 — Foundation (weeks 1–2)
+## Phase 1 — Foundation ✅ Complete
 *No pipeline changes. Pure infrastructure setup.*
 
 ### Task 1.1 — PII inventory config + column tagging notebook
@@ -110,7 +114,7 @@ stored encrypted in a key vault; on erasure, delete the key. Immediate suppressi
 
 ---
 
-## Phase 2 — Bronze + Silver hardening (weeks 3–5)
+## Phase 2 — Bronze + Silver hardening ✅ Complete
 *Bronze quarantine live. Silver PII encrypted. Silver DQ writing results.*
 
 ### Task 2.1 — Bronze quarantine table + routing
@@ -189,7 +193,7 @@ Add post-MERGE DQ block to `NB_process_to_silver_generic.ipynb`:
 
 ---
 
-## Phase 3 — Vault + Gold + Erasure pipeline (weeks 6–9)
+## Phase 3 — Vault + Gold + Erasure pipeline ✅ Complete
 *Full erasure cycle end-to-end. Vault DQ live. Gold certified.*
 
 ### Task 3.1 — Vault integrity checks
@@ -259,7 +263,7 @@ Add post-MERGE DQ block to `NB_process_to_silver_generic.ipynb`:
 
 ---
 
-## Phase 4 — Visibility + operationalisation (weeks 10–12)
+## Phase 4 — Visibility + operationalisation 🔲 Pending
 *Dashboards live. Alerts configured. Runbooks documented.*
 
 ### Task 4.1 — DQ monitoring dashboard

@@ -1,0 +1,240 @@
+bundle:
+  name: dvdrental-cdc-pipeline
+
+# workspace.host is intentionally unset here: Databricks bundle config does not
+# support shell-style ${VAR} interpolation for auth fields. The CLI picks up
+# the DATABRICKS_HOST environment variable (see .env) automatically instead.
+
+# Resource paths (notebook_task.notebook_path, pipeline libraries) reach outside
+# this directory into the repo root (../../ingestion, ../../processing, etc.),
+# so the sync root must cover the whole repo, not just orchestration/bundle/.
+sync:
+  paths:
+    - ../..
+
+variables:
+  catalog:
+    description: Unity Catalog catalog name
+    default: workspace
+  dbt_warehouse_id:
+    description: SQL warehouse ID for dbt runs
+    default: 53165753164ae80e
+
+targets:
+  dev:
+    mode: development
+    default: true
+  prod:
+    mode: production
+
+resources:
+  jobs:
+
+    # Bronze: Structured streaming from Kafka to Bronze Delta tables.
+    # This is a long-running streaming job; trigger manually or separately.
+    dvdrental-bronze:
+      name: "[dvdrental] Bronze - Kafka to Bronze"
+      tags:
+        layer: bronze
+        project: dvdrental
+      tasks:
+        - task_key: kafka_to_bronze
+          notebook_task:
+            notebook_path: ../../ingestion/consumers/NB_ingest_to_bronze.ipynb
+            base_parameters:
+              catalog: ${var.catalog}
+
+    # Silver: Bronze to Silver MERGE for all 15 source tables (15 parallel tasks).
+    dvdrental-silver:
+      name: "[dvdrental] Silver - Bronze to Silver (15 tables)"
+      tags:
+        layer: silver
+        project: dvdrental
+      tasks:
+        - task_key: silver_actor
+          notebook_task:
+            notebook_path: ../../processing/silver/NB_process_to_silver_generic.ipynb
+            base_parameters:
+              table_id: actor
+              catalog: ${var.catalog}
+        - task_key: silver_address
+          notebook_task:
+            notebook_path: ../../processing/silver/NB_process_to_silver_generic.ipynb
+            base_parameters:
+              table_id: address
+              catalog: ${var.catalog}
+        - task_key: silver_category
+          notebook_task:
+            notebook_path: ../../processing/silver/NB_process_to_silver_generic.ipynb
+            base_parameters:
+              table_id: category
+              catalog: ${var.catalog}
+        - task_key: silver_city
+          notebook_task:
+            notebook_path: ../../processing/silver/NB_process_to_silver_generic.ipynb
+            base_parameters:
+              table_id: city
+              catalog: ${var.catalog}
+        - task_key: silver_country
+          notebook_task:
+            notebook_path: ../../processing/silver/NB_process_to_silver_generic.ipynb
+            base_parameters:
+              table_id: country
+              catalog: ${var.catalog}
+        - task_key: silver_customer
+          notebook_task:
+            notebook_path: ../../processing/silver/NB_process_to_silver_generic.ipynb
+            base_parameters:
+              table_id: customer
+              catalog: ${var.catalog}
+        - task_key: silver_film
+          notebook_task:
+            notebook_path: ../../processing/silver/NB_process_to_silver_generic.ipynb
+            base_parameters:
+              table_id: film
+              catalog: ${var.catalog}
+        - task_key: silver_film_actor
+          notebook_task:
+            notebook_path: ../../processing/silver/NB_process_to_silver_generic.ipynb
+            base_parameters:
+              table_id: film_actor
+              catalog: ${var.catalog}
+        - task_key: silver_film_category
+          notebook_task:
+            notebook_path: ../../processing/silver/NB_process_to_silver_generic.ipynb
+            base_parameters:
+              table_id: film_category
+              catalog: ${var.catalog}
+        - task_key: silver_inventory
+          notebook_task:
+            notebook_path: ../../processing/silver/NB_process_to_silver_generic.ipynb
+            base_parameters:
+              table_id: inventory
+              catalog: ${var.catalog}
+        - task_key: silver_language
+          notebook_task:
+            notebook_path: ../../processing/silver/NB_process_to_silver_generic.ipynb
+            base_parameters:
+              table_id: language
+              catalog: ${var.catalog}
+        - task_key: silver_payment
+          notebook_task:
+            notebook_path: ../../processing/silver/NB_process_to_silver_generic.ipynb
+            base_parameters:
+              table_id: payment
+              catalog: ${var.catalog}
+        - task_key: silver_rental
+          notebook_task:
+            notebook_path: ../../processing/silver/NB_process_to_silver_generic.ipynb
+            base_parameters:
+              table_id: rental
+              catalog: ${var.catalog}
+        - task_key: silver_staff
+          notebook_task:
+            notebook_path: ../../processing/silver/NB_process_to_silver_generic.ipynb
+            base_parameters:
+              table_id: staff
+              catalog: ${var.catalog}
+        - task_key: silver_store
+          notebook_task:
+            notebook_path: ../../processing/silver/NB_process_to_silver_generic.ipynb
+            base_parameters:
+              table_id: store
+              catalog: ${var.catalog}
+
+    # Vault + Gold: dbt build running DataVault models then Gold data marts.
+    dvdrental-vault-gold:
+      name: "[dvdrental] Vault + Gold - dbt build"
+      tags:
+        layer: vault_gold
+        project: dvdrental
+      environments:
+        - environment_key: serverless_dbt
+          spec:
+            client: "1"
+      tasks:
+        - task_key: dbt_vault
+          environment_key: serverless_dbt
+          dbt_task:
+            project_directory: ../../transformation/dbt_project
+            commands:
+              - "dbt deps"
+              - "dbt build --select vault"
+            warehouse_id: ${var.dbt_warehouse_id}
+            schema: vault
+        - task_key: dbt_gold
+          depends_on:
+            - task_key: dbt_vault
+          environment_key: serverless_dbt
+          dbt_task:
+            project_directory: ../../transformation/dbt_project
+            commands:
+              - "dbt build --select gold"
+            warehouse_id: ${var.dbt_warehouse_id}
+            schema: gold
+
+    # Orchestrator: runs Silver then Vault+Gold in sequence.
+    # Bronze runs independently (it is a continuous streaming job).
+    dvdrental-orchestrator:
+      name: "[dvdrental] Orchestrator - Silver to Vault+Gold"
+      tags:
+        project: dvdrental
+      schedule:
+        quartz_cron_expression: "0 0 2 * * ?"
+        timezone_id: "UTC"
+        pause_status: PAUSED
+      tasks:
+        - task_key: run_silver
+          run_job_task:
+            job_id: ${resources.jobs.dvdrental-silver.id}
+        - task_key: run_vault_gold
+          depends_on:
+            - task_key: run_silver
+          run_job_task:
+            job_id: ${resources.jobs.dvdrental-vault-gold.id}
+
+    # --- pump.fun near-real-time pipeline (independent of dvdrental) ---
+    # Producer: the ingestion/pumpfun websocket service (runs outside Databricks,
+    # e.g. via systemd/Docker) lands compressed batch envelopes in a Unity
+    # Catalog Volume. This job triggers the pumpapi-lakehouse Lakeflow
+    # Declarative Pipeline (resources.pipelines below) every 2 minutes, which
+    # does all the Bronze + Silver work in one continuous DAG — a plain
+    # notebook_task can't run pyspark.pipelines source code.
+    pumpfun-bronze:
+      name: "[pumpfun] Trigger pumpapi-lakehouse pipeline"
+      tags:
+        project: pumpfun
+      schedule:
+        quartz_cron_expression: "0 */2 * * * ?"
+        timezone_id: "UTC"
+        pause_status: PAUSED
+      tasks:
+        - task_key: run_pumpapi_lakehouse
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.pumpapi-lakehouse.id}
+
+  pipelines:
+
+    # pump.fun Bronze + Silver, as one Lakeflow Declarative Pipeline (source:
+    # ../../pumpapi-lakehouse/transformations/). Decodes the zstd+base64
+    # batch envelopes landed by ingestion/pumpfun into
+    # bronze.pump_events_raw, then fans out into three Silver tables:
+    # pump_events (all events, typed), pump_tokens (create events, one row
+    # per token), pump_transfers (transfer events, one row per transfer).
+    # Triggered (not continuous) — the pumpfun-bronze job above runs it every
+    # 2 minutes. Deploy with `databricks bundle deploy`; the raw-API
+    # scripts/deploy_jobs.py does not manage this resource (see its docstring).
+    pumpapi-lakehouse:
+      name: "[pumpfun] pumpapi-lakehouse (Bronze + Silver)"
+      catalog: ${var.catalog}
+      schema: silver
+      development: true
+      continuous: false
+      channel: CURRENT
+      serverless: true
+      libraries:
+        - glob:
+            include: ../../pumpapi-lakehouse/transformations/**
+      environment:
+        dependencies:
+          - zstandard

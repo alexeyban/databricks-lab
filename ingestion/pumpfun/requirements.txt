@@ -1,0 +1,4 @@
+websockets
+aiohttp
+python-dotenv
+zstandard
