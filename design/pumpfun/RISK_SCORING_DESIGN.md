@@ -14,8 +14,17 @@ cap missed a dump ~1h46m after creation) + `creator_dumped_recent`
 `pumpapi-lakehouse` Lakeflow pipeline so per-mint recompute can be
 incremental (only mints touched since the last run); see that notebook's
 first cell for why this doesn't fit the declarative `@dp.table`
-framework. Weights/thresholds are still first-pass, now calibrated
-against exactly one real case — see Open Questions.**
+framework. A second real case (mint
+`12NvSK9hEZsaFzjyNGCAK3mk1UywrL7ENTKJmYKDpump`: pumped to ~$21.7K market
+cap then collapsed ~1223x over the next day) had near-zero holder
+concentration and no creator dump, so those signals stayed quiet;
+`sniping_ratio` alone (20/100 points) wasn't enough to reach `medium`.
+Added `sniper_flip_ratio` — the share of launch-window snipers who sell
+again within 15 minutes (this mint: 258 snipers, 251/97% flipped) — a
+deliberately *earlier* signal than price-drawdown-from-peak, which is
+only observable after a crash has already happened. Weights/thresholds
+are still first-pass, now calibrated against two real cases — see Open
+Questions.**
 
 ---
 
