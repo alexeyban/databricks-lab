@@ -8,3 +8,9 @@ services:
       - .env
     volumes:
       - ./data:/app/data
+    # Some hosts (systemd-resolved's 127.0.0.53 stub) aren't reachable from
+    # inside the container network namespace, breaking all DNS lookups.
+    # Pin public resolvers explicitly rather than relying on the host's.
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
