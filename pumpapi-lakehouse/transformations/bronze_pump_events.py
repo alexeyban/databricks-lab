@@ -1,4 +1,5 @@
 import base64
+import gc
 
 from pyspark import pipelines as dp
 from pyspark.sql import functions as F
@@ -9,14 +10,10 @@ import zstandard as zstd
 SOURCE_PATH = "/Volumes/workspace/default/mnt/pumpapi"
 
 # Bounds how many envelope files Auto Loader reads per micro-batch. Each
-# file can hold up to 5000 events (producer default) that get fully
-# decompressed in-memory by the per-row decode_envelope UDF -- against a
-# large backlog (tens of thousands of files accumulate fast at a 2-minute
-# producer flush cadence), reading them all in one micro-batch OOMs the
-# executor ("Executor got terminated abnormally due to OUT_OF_MEMORY").
-# A triggered stream still drains the whole backlog, just across several
-# bounded micro-batches within the same pipeline update instead of one.
-# 100 still OOM'd against the real backlog (~2 min in); dropped further.
+# file can hold up to 5000 events (producer default). Kept as a
+# complementary safeguard alongside the mapInPandas rewrite below -- on
+# its own (tried at 100, then 20) it wasn't sufficient, see that
+# function's docstring for the actual OOM root cause and fix.
 MAX_FILES_PER_TRIGGER = 20
 
 # Fixed schema for the batch envelopes written by
@@ -34,27 +31,60 @@ _ENVELOPE_SCHEMA = StructType([
 
 _SUPPORTED_CODECS = {"zstd"}
 
-
-def _decode_envelope(data_b64: str, codec: str) -> str | None:
-    """base64-decode + decompress one envelope's payload back into JSONL text."""
-    if data_b64 is None or codec is None:
-        return None
-
-    if codec not in _SUPPORTED_CODECS:
-        # Unsupported codec: surface as a null jsonl_text rather than failing
-        # the pipeline -- these rows are easy to spot and backfill later.
-        return None
-
-    # Instantiated per call, not module-level: a ZstdDecompressor holds a C
-    # extension context that Spark can't pickle when shipping this UDF's
-    # closure to executors ("TypeError: cannot pickle 'zstd.ZstdDecompressor'
-    # object"), which fails the whole flow at analysis time.
-    decompressor = zstd.ZstdDecompressor()
-    compressed = base64.b64decode(data_b64)
-    return decompressor.decompress(compressed).decode("utf-8")
+# One row per decompressed JSONL line, still as raw unparsed text -- the
+# same shape "line" used to have after F.explode(F.split(jsonl_text, "\n")).
+# All downstream field extraction (_source/_ingested_at/event) stays on
+# this raw text via get_json_object, unchanged from before this rewrite.
+_LINES_SCHEMA = StructType([
+    StructField("line", StringType(), True),
+])
 
 
-decode_envelope = F.udf(_decode_envelope, StringType())
+def _decode_batch(pdf_iter):
+    """mapInPandas worker: decompresses envelopes and emits one row per
+    JSONL line, batch by batch (batch size bounded by the pipeline's
+    spark.sql.execution.arrow.maxRecordsPerBatch config), instead of a
+    scalar UDF that returned one big decompressed-text column per
+    envelope row for Spark to then split()+explode() downstream.
+
+    Root cause this works around: three different batch-size knobs tried
+    in isolation (Auto Loader maxFilesPerTrigger at 100 then 20, then
+    Arrow maxRecordsPerBatch=5 on top) all OOM'd at ~the same wall-clock
+    mark regardless of size -- "Executor got terminated abnormally due to
+    OUT_OF_MEMORY" / "[UDF_PYSPARK_ERROR.OOM] Python worker exited
+    unexpectedly". That pattern points at the *reused* Python worker
+    process's memory never being returned to the OS across many
+    decompress calls (a known CPython/zstd-C-extension allocator
+    behavior), not any single batch being too large. serverless
+    pipelines reject spark.python.worker.reuse=false (which would force
+    a fresh worker per task and sidestep this directly: "not allowed for
+    serverless pipelines"), so this explicitly drops references to the
+    decompressed buffers and calls gc.collect() after each batch as the
+    next-best mitigation.
+    """
+    import pandas as pd
+
+    for pdf in pdf_iter:
+        lines = []
+
+        for data_b64, codec in zip(pdf["data_b64"], pdf["codec"]):
+            if data_b64 is None or codec is None or codec not in _SUPPORTED_CODECS:
+                # Unsupported/missing codec: skip rather than failing the
+                # pipeline -- these rows are easy to spot and backfill later.
+                continue
+
+            decompressor = zstd.ZstdDecompressor()
+            compressed = base64.b64decode(data_b64)
+            text = decompressor.decompress(compressed).decode("utf-8")
+            del compressed, decompressor
+
+            lines.extend(line for line in text.split("\n") if line)
+            del text
+
+        yield pd.DataFrame({"line": lines})
+
+        del lines, pdf
+        gc.collect()
 
 
 @dp.table(
@@ -72,16 +102,10 @@ def pump_events():
         .load(SOURCE_PATH)
     )
 
-    decoded = (
-        envelopes
-        .withColumn("jsonl_text", decode_envelope(F.col("data_b64"), F.col("codec")))
-        .filter(F.col("jsonl_text").isNotNull())
-    )
-
     lines = (
-        decoded
-        .withColumn("line", F.explode(F.split(F.col("jsonl_text"), "\n")))
-        .filter(F.col("line") != "")
+        envelopes
+        .select("data_b64", "codec")
+        .mapInPandas(_decode_batch, schema=_LINES_SCHEMA)
     )
 
     return (
