@@ -22,9 +22,23 @@ concentration and no creator dump, so those signals stayed quiet;
 Added `sniper_flip_ratio` — the share of launch-window snipers who sell
 again within 15 minutes (this mint: 258 snipers, 251/97% flipped) — a
 deliberately *earlier* signal than price-drawdown-from-peak, which is
-only observable after a crash has already happened. Weights/thresholds
-are still first-pass, now calibrated against two real cases — see Open
-Questions.**
+only observable after a crash has already happened.
+
+A follow-up audit (`design/pumpfun/RISK_SCORING_GAP_AUDIT.md`, 15,912
+low-risk tokens over 30 days) then found the second case's "near-zero
+holder concentration" wasn't actually low — it was the *same underlying
+bug* surfacing again: `_holder_concentration_signal` only read
+`silver_pump_transfers`, but pump.fun holders overwhelmingly trade
+against the bonding curve/pool rather than transferring peer-to-peer.
+Across 30 sampled rugged tokens, transfers-only concentration read
+0.5–16% when the true trade-based concentration was 99.98–99.996%.
+Fixed by unioning net position from both `pump_trades` and
+`pump_transfers`. Also added `scoring_model_version` (an incrementally
+scored table can silently freeze a dead mint's row at an older model
+version's output — 28 of the 30 audited tokens hadn't been re-touched
+since `sniper_flip_ratio` shipped). Weights/thresholds are still
+first-pass, now calibrated against three real cases plus a 30-day gap
+audit — see Open Questions.**
 
 ---
 
