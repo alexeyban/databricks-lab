@@ -207,14 +207,11 @@ resources:
       schedule:
         quartz_cron_expression: "0 */2 * * * ?"
         timezone_id: "UTC"
-        # Paused again: bronze OOMs on the real ~54.5k-file backlog
-        # regardless of maxFilesPerTrigger/Arrow batch tuning tried so far
-        # (all fail at ~2min in), and a failed streaming micro-batch commits
-        # no offset progress -- an UNPAUSED schedule here crash-loops on the
-        # same backlog range every 2 minutes for no forward progress. Needs
-        # a real fix (likely rewriting decode_envelope's memory pattern)
-        # before re-enabling.
-        pause_status: PAUSED
+        # Re-enabled: the mapInPandas rewrite of decode_envelope (see
+        # bronze_pump_events.py) fixed the backlog OOM -- confirmed live,
+        # a full triggered update processed ~193.5M rows into
+        # bronze.pump_events_raw without error.
+        pause_status: UNPAUSED
       tasks:
         - task_key: run_pumpapi_lakehouse
           pipeline_task:
