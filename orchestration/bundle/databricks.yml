@@ -199,7 +199,10 @@ resources:
     # Catalog Volume. This job triggers the pumpapi-lakehouse Lakeflow
     # Declarative Pipeline (resources.pipelines below) every 2 minutes, which
     # does all the Bronze + Silver work in one continuous DAG — a plain
-    # notebook_task can't run pyspark.pipelines source code.
+    # notebook_task can't run pyspark.pipelines source code. gold_pump_token_risk
+    # runs as a second task, after the pipeline: it needs foreachBatch+MERGE
+    # (selective per-mint recompute) which the declarative pipeline framework
+    # can't express -- see processing/gold/NB_process_pump_token_risk.ipynb.
     pumpfun-bronze:
       name: "[pumpfun] Trigger pumpapi-lakehouse pipeline"
       tags:
@@ -216,6 +219,11 @@ resources:
         - task_key: run_pumpapi_lakehouse
           pipeline_task:
             pipeline_id: ${resources.pipelines.pumpapi-lakehouse.id}
+        - task_key: run_gold_pump_token_risk
+          depends_on:
+            - task_key: run_pumpapi_lakehouse
+          notebook_task:
+            notebook_path: ../../processing/gold/NB_process_pump_token_risk.ipynb
 
   pipelines:
 

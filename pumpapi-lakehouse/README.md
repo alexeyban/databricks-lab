@@ -3,9 +3,18 @@
 A [Lakeflow Declarative Pipeline](https://docs.databricks.com/aws/en/dlt/)
 (the modern `pyspark.pipelines` API — successor to `import dlt`) that turns
 the compressed batch envelopes landed by [`../ingestion/pumpfun`](../ingestion/pumpfun/)
-into Bronze + Silver Delta tables, plus a Gold risk-scoring table. One
-pipeline, one DAG: Bronze, all five Silver tables, and Gold run together as
-a single triggered update.
+into Bronze + Silver Delta tables. One pipeline, one DAG: Bronze and all
+five Silver tables run together as a single triggered update.
+
+Gold (`gold_pump_token_risk`) is **not** part of this pipeline — it's a
+separate notebook, `processing/gold/NB_process_pump_token_risk.ipynb`, run
+as a second task in the same `pumpfun-bronze` job, after this pipeline.
+Selective per-mint incremental recompute (only mints with new activity
+since the last run) needs `foreachBatch` + `MERGE`, which the declarative
+`@dp.table` framework doesn't support alongside the window functions
+(`row_number`/`rank` for latest-state and top-holder ranking) the scoring
+logic depends on. See that notebook's first cell and
+`design/pumpfun/RISK_SCORING_DESIGN.md` for the full rationale.
 
 Deployed via Databricks Asset Bundles — see the `pumpapi-lakehouse` resource
 in [`../orchestration/bundle/databricks.yml`](../orchestration/bundle/databricks.yml)
@@ -26,7 +35,10 @@ databricks bundle deploy -t dev
       → silver_pump_transfers.py→ silver.pump_transfers  (action = 'transfer', one row per transfer, exploded)
       → silver_pump_pools.py    → silver.pump_pools      (action IN createPool/migrate/add/remove, one row per pool event)
       → silver_pump_trades.py   → silver.pump_trades     (action IN buy/sell, one row per trade, breakdown exploded)
-          → gold_pump_token_risk.py → gold.gold_pump_token_risk (one row per mint: risk_score, risk_tier, funnel_status)
+
+(separately, as the pumpfun-bronze job's second task, after this pipeline)
+  processing/gold/NB_process_pump_token_risk.ipynb → gold.gold_pump_token_risk
+    (incremental: only mints touched since the last run get recomputed)
 ```
 
 ## transformations/
@@ -38,8 +50,9 @@ databricks bundle deploy -t dev
 | `silver_pump_tokens.py` | `silver.pump_tokens` | Filters to `action = 'create'`; one row per token launch, with initial price/market cap and mint/freeze authority (rug-pull risk signals). |
 | `silver_pump_transfers.py` | `silver.pump_transfers` | Filters to `action = 'transfer'`; explodes the event's `transfers[]` array so each wallet-to-wallet transfer inside a transaction gets its own row. |
 | `silver_pump_pools.py` | `silver.pump_pools` | Filters to `action IN (createPool, migrate, add, remove)`; one row per pool lifecycle event, carrying liquidity/pool-trust fields (`burnedLiquidity`, `lockedLiquidityAfterMigration`, `poolCreatedBy`, `mayhemMode`, etc.) for the risk-scoring Gold layer (`design/pumpfun/RISK_SCORING_DESIGN.md`). |
-| `silver_pump_trades.py` | `silver.pump_trades` | Filters to `action IN (buy, sell)`; explodes each event's `breakdown[]` array so each individual (non-aggregated) trade gets its own row — this is what lets Gold detect bundled/sniped buys at launch. |
-| `gold_pump_token_risk.py` | `gold.gold_pump_token_risk` | Materialized view (batch `spark.read.table`, not `readStream`) — one row per `mint`: hard-blocker flags (mint/freeze authority, unsafe token extensions, mayhem mode), a weighted 0-100 `risk_score`/`risk_tier`, and `funnel_status` (`created`/`active`/`migrated`/`rugged`). Design and open questions: `design/pumpfun/RISK_SCORING_DESIGN.md`. |
+| `silver_pump_trades.py` | `silver.pump_trades` | Filters to `action IN (buy, sell)`; explodes each event's `breakdown[]` array so each individual (non-aggregated) trade gets its own row — this is what lets Gold detect bundled/sniped and sniped-via-separate-transactions buys at launch. |
+
+Gold lives outside this directory — see `processing/gold/NB_process_pump_token_risk.ipynb`.
 
 ## Why one pipeline instead of separate Bronze/Silver jobs
 
