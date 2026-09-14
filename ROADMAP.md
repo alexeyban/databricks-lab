@@ -147,13 +147,20 @@ Phase 4 of `design/dq_gdpr/IMPLEMENTATION_PLAN.md`.
 ### 9. pump.fun — remaining action types, Vault/Gold, and DQ parity
 
 Bronze + Silver are done for `pump_events` (all events, general schema),
-`pump_tokens` (`create` events), and `pump_transfers` (`transfer` events).
-See `design/pumpfun/PUMPFUN_PIPELINE.md` and `pumpapi-lakehouse/README.md`.
+`pump_tokens` (`create` events), `pump_transfers` (`transfer` events),
+`pump_pools` (`createPool`/`migrate`/`add`/`remove` events), and
+`pump_trades` (`buy`/`sell` events, `breakdown[]` exploded). See
+`design/pumpfun/PUMPFUN_PIPELINE.md`, `pumpapi-lakehouse/README.md`, and
+`design/pumpfun/RISK_SCORING_DESIGN.md` (Gold risk-scoring layer proposal
+these two tables were added for).
 
 **Tasks:**
 - Parse remaining action types not yet in a dedicated Silver table:
-  `buy`/`sell` trades, `migrate`, `createPool`/`add`/`remove` (pool
-  liquidity state), `claimCashback`, `claimCreatorFees`
+  `claimCashback`, `claimCreatorFees`
+- Implement `gold_pump_token_risk` per
+  `design/pumpfun/RISK_SCORING_DESIGN.md` (hard-blocker flags + weighted
+  score + migration funnel status), calibrate thresholds against observed
+  data
 - Decide whether pump.fun needs a Vault (Data Vault 2.0) layer or goes
   straight Silver → Gold (no CDC deletes/updates to historize; `pump_tokens`
   is already append-only per creation event)

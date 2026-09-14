@@ -4,7 +4,7 @@ A [Lakeflow Declarative Pipeline](https://docs.databricks.com/aws/en/dlt/)
 (the modern `pyspark.pipelines` API — successor to `import dlt`) that turns
 the compressed batch envelopes landed by [`../ingestion/pumpfun`](../ingestion/pumpfun/)
 into Bronze + Silver Delta tables. One pipeline, one DAG: Bronze and all
-three Silver tables run together as a single triggered update.
+five Silver tables run together as a single triggered update.
 
 Deployed via Databricks Asset Bundles — see the `pumpapi-lakehouse` resource
 in [`../orchestration/bundle/databricks.yml`](../orchestration/bundle/databricks.yml)
@@ -23,6 +23,8 @@ databricks bundle deploy -t dev
       → silver_pump_events.py   → silver.pump_events    (all events, typed columns, DQ expectations)
       → silver_pump_tokens.py   → silver.pump_tokens     (action = 'create', one row per token)
       → silver_pump_transfers.py→ silver.pump_transfers  (action = 'transfer', one row per transfer, exploded)
+      → silver_pump_pools.py    → silver.pump_pools      (action IN createPool/migrate/add/remove, one row per pool event)
+      → silver_pump_trades.py   → silver.pump_trades     (action IN buy/sell, one row per trade, breakdown exploded)
 ```
 
 ## transformations/
@@ -33,6 +35,8 @@ databricks bundle deploy -t dev
 | `silver_pump_events.py` | `silver.pump_events` | Parses every event (regardless of `action`) against a fixed schema into typed columns; `dp.expect` DQ checks require non-null `signature`/`action`. |
 | `silver_pump_tokens.py` | `silver.pump_tokens` | Filters to `action = 'create'`; one row per token launch, with initial price/market cap and mint/freeze authority (rug-pull risk signals). |
 | `silver_pump_transfers.py` | `silver.pump_transfers` | Filters to `action = 'transfer'`; explodes the event's `transfers[]` array so each wallet-to-wallet transfer inside a transaction gets its own row. |
+| `silver_pump_pools.py` | `silver.pump_pools` | Filters to `action IN (createPool, migrate, add, remove)`; one row per pool lifecycle event, carrying liquidity/pool-trust fields (`burnedLiquidity`, `lockedLiquidityAfterMigration`, `poolCreatedBy`, `mayhemMode`, etc.) for the risk-scoring Gold layer (`design/pumpfun/RISK_SCORING_DESIGN.md`). |
+| `silver_pump_trades.py` | `silver.pump_trades` | Filters to `action IN (buy, sell)`; explodes each event's `breakdown[]` array so each individual (non-aggregated) trade gets its own row — this is what lets Gold detect bundled/sniped buys at launch. |
 
 ## Why one pipeline instead of separate Bronze/Silver jobs
 
