@@ -94,6 +94,13 @@ def pump_tokens():
                 "event", "$.tokenProgram"
             ).alias("token_program"),
 
+            # spl-token-2022 extensions -- kept as raw JSON text, no
+            # allow-list of "safe" extensions exists yet (see
+            # design/pumpfun/RISK_SCORING_DESIGN.md open questions)
+            F.get_json_object(
+                "event", "$.tokenExtensions"
+            ).alias("token_extensions"),
+
             # Ingestion metadata
             F.col("_ingested_at"),
 

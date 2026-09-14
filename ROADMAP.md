@@ -149,18 +149,20 @@ Phase 4 of `design/dq_gdpr/IMPLEMENTATION_PLAN.md`.
 Bronze + Silver are done for `pump_events` (all events, general schema),
 `pump_tokens` (`create` events), `pump_transfers` (`transfer` events),
 `pump_pools` (`createPool`/`migrate`/`add`/`remove` events), and
-`pump_trades` (`buy`/`sell` events, `breakdown[]` exploded). See
-`design/pumpfun/PUMPFUN_PIPELINE.md`, `pumpapi-lakehouse/README.md`, and
-`design/pumpfun/RISK_SCORING_DESIGN.md` (Gold risk-scoring layer proposal
-these two tables were added for).
+`pump_trades` (`buy`/`sell` events, `breakdown[]` exploded). A first-pass
+Gold `gold_pump_token_risk` (hard-blocker flags + weighted score +
+migration funnel status) is implemented but not yet deployed/calibrated.
+See `design/pumpfun/PUMPFUN_PIPELINE.md`, `pumpapi-lakehouse/README.md`,
+and `design/pumpfun/RISK_SCORING_DESIGN.md`.
 
 **Tasks:**
 - Parse remaining action types not yet in a dedicated Silver table:
   `claimCashback`, `claimCreatorFees`
-- Implement `gold_pump_token_risk` per
-  `design/pumpfun/RISK_SCORING_DESIGN.md` (hard-blocker flags + weighted
-  score + migration funnel status), calibrate thresholds against observed
-  data
+- Calibrate `gold_pump_token_risk` thresholds/weights against observed
+  data once deployed (burned-liquidity %, launch-window minutes, holder
+  concentration %); find or build the spl-token-2022 "safe extensions"
+  allow-list it currently substitutes a conservative any-extension-flags
+  default for
 - Decide whether pump.fun needs a Vault (Data Vault 2.0) layer or goes
   straight Silver → Gold (no CDC deletes/updates to historize; `pump_tokens`
   is already append-only per creation event)
