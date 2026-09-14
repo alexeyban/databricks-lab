@@ -21,9 +21,18 @@ _ENVELOPE_SCHEMA = StructType([
     StructField("data_b64", StringType(), True),
 ])
 
-_decompressors = {
-    "zstd": zstd.ZstdDecompressor(),
-}
+# Built lazily per worker process -- a ZstdDecompressor can't be pickled, so
+# it must not be instantiated at module load time (that would bind it into
+# the decode_envelope UDF's closure and fail Spark's task serialization).
+_decompressor_cache: dict[str, "zstd.ZstdDecompressor"] = {}
+
+
+def _get_decompressor(codec: str):
+    if codec not in _decompressor_cache:
+        if codec != "zstd":
+            return None
+        _decompressor_cache[codec] = zstd.ZstdDecompressor()
+    return _decompressor_cache[codec]
 
 
 def _decode_envelope(data_b64: str, codec: str) -> str | None:
@@ -31,7 +40,7 @@ def _decode_envelope(data_b64: str, codec: str) -> str | None:
     if data_b64 is None or codec is None:
         return None
 
-    decompressor = _decompressors.get(codec)
+    decompressor = _get_decompressor(codec)
     if decompressor is None:
         # Unsupported codec: surface as a null jsonl_text rather than failing
         # the pipeline -- these rows are easy to spot and backfill later.
@@ -54,6 +63,14 @@ def pump_events():
         spark.readStream
         .format("cloudFiles")
         .option("cloudFiles.format", "json")
+        # Bound each micro-batch by the on-disk (compressed) bytes it will
+        # read, not file count: envelopes decompress ~4.7x (measured), so
+        # 200 files (~260MB compressed) blew up to ~1.3GB of decoded JSONL
+        # text in the UDF worker, over the serverless 1GB function limit.
+        # Capping compressed bytes/trigger keeps decoded memory predictable
+        # regardless of how large individual envelopes get; the ~28k-file
+        # backlog drains incrementally across triggers of this pipeline.
+        .option("cloudFiles.maxBytesPerTrigger", "20mb")
         .schema(_ENVELOPE_SCHEMA)
         .load(SOURCE_PATH)
     )
