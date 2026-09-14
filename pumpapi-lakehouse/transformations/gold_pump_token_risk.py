@@ -37,6 +37,43 @@ BURNED_LIQUIDITY_SAFE_PCT = 25.0
 # status) when reserves fall below this fraction of their observed peak.
 RUG_DRAIN_RATIO = 0.05
 
+# spl-token-2022 extensions that grant the issuer/delegate a way to move,
+# block, tax, or freeze a holder's tokens without their consent, per
+# https://solana.com/docs/tokens/extensions and
+# https://blog.offside.io/p/token-2022-security-best-practices-part-2
+# (PermanentDelegate is that article's top example: it can "directly
+# transfer or burn any amount of mint from any token account" bypassing
+# owner signatures). TransferFeeConfig/-Amount are flagged by presence, not
+# fee magnitude -- PumpAPI's tokenExtensions field doesn't expose the fee
+# rate, and a 0-max-fee TransferFeeConfig is technically harmless, but we
+# can't tell the two apart from this field alone. Deliberately excluded as
+# benign: MemoTransfer and InterestBearingConfig are operational/accounting
+# footguns for integrators, not tools for extracting value from holders;
+# MetadataPointer/TokenMetadata/GroupPointer/TokenGroup/etc. are safe as a
+# property of the mint itself -- the known attack there is a *third party*
+# creating spoofed Metadata/Group accounts that point at someone else's
+# mint, which is a concern for whoever reads metadata content (must verify
+# the pointer is bidirectional), not a property of this mint having the
+# extension. See design/pumpfun/RISK_SCORING_DESIGN.md.
+UNSAFE_TOKEN_EXTENSIONS = [
+    "PermanentDelegate",
+    "NonTransferable",
+    "NonTransferableAccount",
+    "Pausable",
+    "PausableAccount",
+    "DefaultAccountState",
+    "TransferHook",
+    "TransferHookAccount",
+    "TransferFeeConfig",
+    "TransferFeeAmount",
+    "ConfidentialTransferMint",
+    "ConfidentialTransferAccount",
+    "ConfidentialTransferFeeConfig",
+    "ConfidentialTransferFeeAmount",
+    "ConfidentialMintBurn",
+]
+_UNSAFE_TOKEN_EXTENSION_PATTERN = r"\b(?:" + "|".join(UNSAFE_TOKEN_EXTENSIONS) + r")\b"
+
 # Category B weights (max points each signal can contribute to risk_score).
 WEIGHT_BURNED_LIQUIDITY = 35
 WEIGHT_LOCKED_LIQUIDITY = 25
@@ -285,14 +322,15 @@ def gold_pump_token_risk():
         joined
         .withColumn("mint_authority_active", F.col("mint_authority").isNotNull())
         .withColumn("freeze_authority_active", F.col("freeze_authority").isNotNull())
-        # No allow-list of "safe" spl-token-2022 extensions exists yet
-        # (RISK_SCORING_DESIGN.md open questions) -- conservative default:
-        # any non-empty extensions list is flagged.
+        # Deny-list match against UNSAFE_TOKEN_EXTENSIONS -- a substring/
+        # word-boundary check on the raw JSON rather than a parsed array,
+        # since tokenExtensions' exact shape (bare strings vs. objects) is
+        # unconfirmed; matching the extension name as a JSON token works
+        # either way.
         .withColumn(
             "unsafe_token_extension",
             F.col("token_extensions").isNotNull()
-            & (F.col("token_extensions") != "[]")
-            & (F.col("token_extensions") != ""),
+            & F.col("token_extensions").rlike(_UNSAFE_TOKEN_EXTENSION_PATTERN),
         )
     )
 
