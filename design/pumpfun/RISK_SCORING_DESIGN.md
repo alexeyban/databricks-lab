@@ -38,7 +38,19 @@ scored table can silently freeze a dead mint's row at an older model
 version's output — 28 of the 30 audited tokens hadn't been re-touched
 since `sniper_flip_ratio` shipped). Weights/thresholds are still
 first-pass, now calibrated against three real cases plus a 30-day gap
-audit — see Open Questions.**
+audit — see Open Questions.
+
+A fourth case (mint `C4oBvs4xg31Nr7FpW2ePb1UxE2zgL9ueCoAuwnvtpump`: 1 buy
++ 1 sell, ever, market cap flat around $28) surfaced a distinct concern:
+`risk_score=0` there is mathematically correct — no signal fired because
+no manipulation pattern occurred — but "no evidence of manipulation" and
+"confirmed safe" are different claims for a token with essentially no
+trading history to evaluate. Rather than changing risk_score/risk_tier's
+meaning, added `total_trade_count`/`distinct_trader_count` (no baked-in
+threshold, for any consumer including the planned Success Score to apply
+its own bar) and a convenience `has_meaningful_activity` boolean
+(`distinct_trader_count >= MIN_DISTINCT_TRADERS_FOR_MEANINGFUL_ACTIVITY`,
+currently 3) as a separate data-sufficiency axis alongside the score.**
 
 ---
 
