@@ -1,10 +1,10 @@
 # pump.fun Risk-Scoring Layer — Design
 
-**Status (2026-09-14): Design proposal, not implemented. Bronze/Silver for
-`pump_events`/`pump_tokens`/`pump_transfers` exist per
-`PUMPFUN_PIPELINE.md`; this document proposes the additional Silver sources
-and a new Gold layer needed to score newly-launched tokens for rug-pull /
-scam risk.**
+**Status (2026-09-14): First pass implemented (see PRs #13, #14 — not yet
+merged/deployed). `silver_pump_pools`/`silver_pump_trades` added per this
+doc; `gold_pump_token_risk.py` implements Categories A/B/C below, including
+a real deny-list for `unsafe_token_extension` (see that section). Weights
+and thresholds throughout are still uncalibrated first-pass values.**
 
 ---
 
@@ -58,11 +58,48 @@ score) keeps them visible regardless of the total score.
 |---|---|---|
 | `mint_authority_active` | `mintAuthority IS NOT NULL` | `silver_pump_tokens` |
 | `freeze_authority_active` | `freezeAuthority IS NOT NULL` (possible honeypot) | `silver_pump_tokens` |
-| `unsafe_token_extension` | `tokenProgram = 'spl-token-2022'` and `tokenExtensions` contains a value outside an allow-list of known-safe extensions | `silver_pump_tokens` / Bronze |
+| `unsafe_token_extension` | `tokenExtensions` matches a deny-list of extensions that let the issuer/delegate move, block, tax, or freeze a holder's tokens without consent (see below) | `silver_pump_tokens` |
 | `mayhem_mode_on` | `mayhemMode = true` | `silver_pump_pools` (new) |
 
 Any active Category A flag forces the token's risk tier to at least
 `high`, independent of the weighted score below.
+
+**`unsafe_token_extension` deny-list.** Sourced from
+[solana.com/docs/tokens/extensions](https://solana.com/docs/tokens/extensions)
+(full spl-token-2022 extension catalog) and
+[offside.io's Token-2022 security write-up](https://blog.offside.io/p/token-2022-security-best-practices-part-2)
+(concrete attack patterns). Flagged as unsafe: `PermanentDelegate` (the
+offside.io article's top example — a delegate can "directly transfer or
+burn any amount of mint from any token account" bypassing owner
+signatures), `NonTransferable`/`NonTransferableAccount`,
+`Pausable`/`PausableAccount`, `DefaultAccountState` (can default new
+accounts to frozen — a freeze-authority equivalent), `TransferHook`/
+`TransferHookAccount` (arbitrary external program runs on every transfer —
+a known honeypot vector), `TransferFeeConfig`/`TransferFeeAmount` (flagged
+by presence, not fee magnitude — PumpAPI's `tokenExtensions` field doesn't
+expose the actual fee rate, and offside.io notes a 0-max-fee config is
+technically harmless, but the two can't be told apart from this field
+alone), and `ConfidentialTransfer*`/`ConfidentialMintBurn` (own judgment,
+not sourced from either article — flagged for opacity: they hide amounts
+that the rest of this scoring model needs to observe, not for a documented
+exploit).
+
+Deliberately treated as benign: `MemoTransfer` and `InterestBearingConfig`
+are integrator footguns per offside.io (broken transfers, interest-calc
+mismatches), not tools for extracting value from holders.
+`MetadataPointer`/`TokenMetadata`/`GroupPointer`/`TokenGroup`/
+`GroupMemberPointer`/`TokenGroupMember` are safe as a property of *this*
+mint — offside.io's actual finding is that a *third party* can create
+spoofed Metadata/Group accounts pointing at *someone else's* legitimate
+mint ("Everyone can create Token-2022 accounts of type Metadata, Group and
+Group Member, fill these accounts with deliberately crafted data, and
+point them to a legitimate mint"). That's a risk for whoever reads
+metadata content, not for a mint that happens to use these extensions —
+relevant if this pipeline ever surfaces token name/symbol/image, at which
+point it must verify the reference is bidirectional
+(`account.metadata_pointer.metadata_address == mint` AND
+`mint.metadata == account`) before trusting it. Not currently applicable:
+`gold_pump_token_risk` doesn't read metadata content today.
 
 ### Category B — weighted score (0–100)
 
@@ -106,10 +143,25 @@ result through the same helper pattern and alert the same channel.
 - **Thresholds** (burned-liquidity %, creator-dump window in minutes,
   top-10 concentration %) are expert guesses here and should be calibrated
   against historically confirmed `rugged` tokens once enough are observed.
-- **`tokenExtensions` allow-list**: the glossary references "our guide" for
-  which spl-token-2022 extensions are safe, but that guide isn't in this
-  repo. Start conservative (any extension present → flag) until a source
-  list is found or built.
+- **`tokenExtensions` deny-list — resolved**, sourced externally (see
+  Category A above) rather than from the glossary's own unpublished
+  "guide". Two residual gaps: (1) PumpAPI's exact `tokenExtensions` JSON
+  shape (bare strings vs. objects) is still unconfirmed against real data
+  — the implementation matches the extension name as a JSON token via
+  regex rather than parsing a typed array, to be robust to either shape;
+  (2) `TransferFeeConfig`/`TransferFeeAmount` are flagged by presence only
+  since the field doesn't expose the fee rate — worth tightening to
+  fee-magnitude scoring (like `poolFeeRateAfterMigration`) if PumpAPI ever
+  exposes it.
+- **Metadata/Group spoofing (bidirectional verification)**: not an issue
+  for the current implementation, which never reads metadata content, but
+  a real future footgun per offside.io — see the `unsafe_token_extension`
+  note above. If/when this pipeline surfaces token name/symbol/image
+  (e.g. for a dashboard or Slack alert), it must verify
+  `account.metadata_pointer.metadata_address == mint` AND
+  `mint.metadata == account` before trusting the displayed data, or it can
+  be tricked into showing an attacker's spoofed name/image for a
+  legitimate mint.
 - **History vs. snapshot**: `gold_pump_token_risk` as designed is a
   snapshot (current state only). Seeing how a token's score evolved before
   it was rugged is valuable and argues for an append-only
@@ -119,9 +171,12 @@ result through the same helper pattern and alert the same channel.
 
 ## Next steps
 
-1. Add `silver_pump_pools.py` and `silver_pump_trades.py` to
-   `pumpapi-lakehouse/transformations/`.
-2. Add `gold_pump_token_risk.py` to the same pipeline, joining the four
-   Silver sources per `mint`.
-3. Calibrate weights/thresholds against observed data.
-4. Wire alerting through the existing DQ/GDPR monitoring helpers.
+1. ~~Add `silver_pump_pools.py` and `silver_pump_trades.py`~~ — done, #13.
+2. ~~Add `gold_pump_token_risk.py`~~ — done, #14 (Categories A/B/C +
+   `unsafe_token_extension` deny-list).
+3. Merge and deploy #12/#13/#14, then verify `gold.gold_pump_token_risk`
+   against live PumpAPI events — nothing in this design has run against
+   real data yet.
+4. Calibrate weights/thresholds against observed data (see residual gaps
+   under Open questions).
+5. Wire alerting through the existing DQ/GDPR monitoring helpers.
