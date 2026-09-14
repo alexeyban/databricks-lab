@@ -1,10 +1,11 @@
 # pump.fun Near-Real-Time Pipeline
 **Repo:** databricks-lab / alexeyban
 
-> **Status (2026-09-11): Bronze + Silver implemented as `pumpapi-lakehouse`,
+> **Status (2026-09-14): Bronze + Silver implemented as `pumpapi-lakehouse`,
 > one Lakeflow Declarative Pipeline (`pyspark.pipelines`) decoding
-> zstd+base64 compressed batches. Vault/Gold not started — see
-> `ROADMAP.md` §9.**
+> zstd+base64 compressed batches. Silver now covers five tables, including
+> `pump_pools` and `pump_trades` added for the risk-scoring Gold layer
+> (`RISK_SCORING_DESIGN.md`). Vault/Gold not started — see `ROADMAP.md` §9.**
 
 ---
 
@@ -70,22 +71,28 @@ glossary), so `signature` alone is not a unique row key.
    design (plain Auto Loader notebook, `cloudFiles.format = "text"` over
    raw JSONL) is kept for reference at
    `ingestion/consumers/outdated__NB_ingest_pumpfun_to_bronze.ipynb`.
-4. **Silver is three per-action-family tables, not per fixed table
-   config.** The existing metadata-driven Silver notebook
+4. **Silver is per-action-family tables, not per fixed table config.** The
+   existing metadata-driven Silver notebook
    (`processing/silver/NB_process_to_silver_generic.ipynb`) is built around
    Debezium's before/after envelope and doesn't fit heterogeneous JSON — so
    pump.fun gets dedicated transformations instead of a new per-table JSON
    config, all reading `spark.readStream.table(BRONZE_TABLE)`:
    `silver_pump_events.py` (every event, one fixed schema, typed columns),
    `silver_pump_tokens.py` (`action = 'create'`, one row per token launch),
-   and `silver_pump_transfers.py` (`action = 'transfer'`, `posexplode`d so
-   each wallet-to-wallet transfer inside a transaction gets its own row).
-   This replaced an earlier `buy`/`sell` trades + `create`/`migrate` tokens
-   split (kept for reference at
+   `silver_pump_transfers.py` (`action = 'transfer'`, `posexplode`d so each
+   wallet-to-wallet transfer inside a transaction gets its own row),
+   `silver_pump_pools.py` (`action IN (createPool, migrate, add, remove)`,
+   one row per pool lifecycle event — liquidity/pool-trust fields for
+   risk scoring), and `silver_pump_trades.py` (`action IN (buy, sell)`,
+   `posexplode`d over `breakdown[]` so each individual, non-aggregated
+   trade gets its own row — this is what lets Gold detect bundled/sniped
+   buys at launch). This replaced an earlier `buy`/`sell` trades +
+   `create`/`migrate` tokens split (kept for reference at
    `processing/silver/outdated__NB_process_pumpfun_silver.ipynb`); the
-   remaining action types (`buy`/`sell`, `migrate`, `createPool`/`add`/
-   `remove`, `claimCashback`, `claimCreatorFees`) are left in Bronze only
-   for now (§ROADMAP.md 9).
+   remaining action types (`claimCashback`, `claimCreatorFees`) are left in
+   Bronze only for now (§ROADMAP.md 9). `pump_pools` and `pump_trades` were
+   added specifically to unblock the risk-scoring Gold layer — see
+   `RISK_SCORING_DESIGN.md`.
 5. **Independent resource graph, not chained into `dvdrental-orchestrator`.**
    Different domain, different cadence, different failure blast radius.
    `pumpapi-lakehouse` (the pipeline) and `pumpfun-bronze` (the job that
@@ -115,6 +122,8 @@ pump.fun on-chain activity
             silver_pump_events.py    → workspace.silver.pump_events       (all events, typed)
             silver_pump_tokens.py    → workspace.silver.pump_tokens       (action = 'create')
             silver_pump_transfers.py → workspace.silver.pump_transfers    (action = 'transfer', exploded)
+            silver_pump_pools.py     → workspace.silver.pump_pools        (action IN createPool/migrate/add/remove)
+            silver_pump_trades.py    → workspace.silver.pump_trades       (action IN buy/sell, breakdown exploded)
 ```
 
 ## Tables
@@ -125,6 +134,8 @@ pump.fun on-chain activity
 | `silver.pump_events` | Silver | signature + action (not enforced) | every event, typed against one fixed schema, `_raw_event` kept for fallback |
 | `silver.pump_tokens` | Silver | mint (not enforced) | one row per `create` event: initial price/market cap, mint/freeze authority |
 | `silver.pump_transfers` | Silver | signature + transfer_index | one row per transfer inside a `transfer` event's `transfers[]` array |
+| `silver.pump_pools` | Silver | pool_id + signature (not enforced) | one row per `createPool`/`migrate`/`add`/`remove` event: reserves, `burnedLiquidity`, `lockedLiquidityAfterMigration`, `poolCreatedBy`, `mayhemMode` |
+| `silver.pump_trades` | Silver | signature + breakdown_index | one row per individual trade inside a `buy`/`sell` event's `breakdown[]` array |
 
 ## Open items
 
