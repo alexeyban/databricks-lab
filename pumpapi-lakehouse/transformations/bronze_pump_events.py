@@ -16,7 +16,8 @@ SOURCE_PATH = "/Volumes/workspace/default/mnt/pumpapi"
 # executor ("Executor got terminated abnormally due to OUT_OF_MEMORY").
 # A triggered stream still drains the whole backlog, just across several
 # bounded micro-batches within the same pipeline update instead of one.
-MAX_FILES_PER_TRIGGER = 100
+# 100 still OOM'd against the real backlog (~2 min in); dropped further.
+MAX_FILES_PER_TRIGGER = 20
 
 # Fixed schema for the batch envelopes written by
 # ingestion/pumpfun/app/writer.py — no schema inference/evolution needed,
