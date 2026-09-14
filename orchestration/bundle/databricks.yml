@@ -207,6 +207,10 @@ resources:
       schedule:
         quartz_cron_expression: "0 */2 * * * ?"
         timezone_id: "UTC"
+        # Re-enabled: the mapInPandas rewrite of decode_envelope (see
+        # bronze_pump_events.py) fixed the backlog OOM -- confirmed live,
+        # a full triggered update processed ~193.5M rows into
+        # bronze.pump_events_raw without error.
         pause_status: UNPAUSED
       tasks:
         - task_key: run_pumpapi_lakehouse
@@ -232,6 +236,23 @@ resources:
       continuous: false
       channel: CURRENT
       serverless: true
+      # Caps how many rows Spark ships to the Python worker per Arrow
+      # record batch. bronze_pump_events.py's decode_envelope UDF fully
+      # decompresses one envelope (up to 5000 events) into memory per row;
+      # even with cloudFiles.maxFilesPerTrigger bounding the micro-batch to
+      # 20 files, the default (10000) batch size let too many of those
+      # decompressed strings pile up in the worker at once --
+      # "[UDF_PYSPARK_ERROR.OOM] Python worker exited unexpectedly (crashed)
+      # due to running out of memory". Three different batch-size settings
+      # (100 files, 20 files, Arrow batch=5) all OOM'd at ~the same ~2min
+      # mark regardless of batch size -- pointing at the Python worker
+      # process accumulating memory (never returned to the OS) across its
+      # reused lifetime rather than any single batch being too large.
+      # spark.python.worker.reuse=false would force a fresh worker per task,
+      # but serverless pipelines reject that config outright ("not allowed
+      # for serverless pipelines") -- not a lever available here.
+      configuration:
+        spark.sql.execution.arrow.maxRecordsPerBatch: "5"
       libraries:
         - glob:
             include: ../../pumpapi-lakehouse/transformations/**
