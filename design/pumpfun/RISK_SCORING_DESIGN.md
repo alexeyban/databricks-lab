@@ -1,10 +1,21 @@
 # pump.fun Risk-Scoring Layer — Design
 
-**Status (2026-09-14): First pass implemented (see PRs #13, #14 — not yet
-merged/deployed). `silver_pump_pools`/`silver_pump_trades` added per this
-doc; `gold_pump_token_risk.py` implements Categories A/B/C below, including
-a real deny-list for `unsafe_token_extension` (see that section). Weights
-and thresholds throughout are still uncalibrated first-pass values.**
+**Status (2026-09-14): Deployed and calibrated once against a real
+confirmed rug (mint `12DqvhKnLFV9uiGiQYJeAkSLS7eF5FiE5UE61vA1pump`), which
+the first-pass model scored `risk_score=20`/`low` despite an obvious
+bot-sniped launch + delayed creator dump. Added sniping (distinct buyers
+in a short post-launch window, not just same-tx bundling),
+`creator_dumped_ever` (unbounded lookback — the original launch-window
+cap missed a dump ~1h46m after creation) + `creator_dumped_recent`
+(rolling window on scoring time, escalates to `critical`), and an
+`extreme_concentration` tier-floor. Re-scored the same mint at
+`risk_score=70`/`high` after the fix. Scoring now runs as
+`processing/gold/NB_process_pump_token_risk.ipynb` — moved out of the
+`pumpapi-lakehouse` Lakeflow pipeline so per-mint recompute can be
+incremental (only mints touched since the last run); see that notebook's
+first cell for why this doesn't fit the declarative `@dp.table`
+framework. Weights/thresholds are still first-pass, now calibrated
+against exactly one real case — see Open Questions.**
 
 ---
 
