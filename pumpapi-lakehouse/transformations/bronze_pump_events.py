@@ -21,9 +21,7 @@ _ENVELOPE_SCHEMA = StructType([
     StructField("data_b64", StringType(), True),
 ])
 
-_decompressors = {
-    "zstd": zstd.ZstdDecompressor(),
-}
+_SUPPORTED_CODECS = {"zstd"}
 
 
 def _decode_envelope(data_b64: str, codec: str) -> str | None:
@@ -31,12 +29,16 @@ def _decode_envelope(data_b64: str, codec: str) -> str | None:
     if data_b64 is None or codec is None:
         return None
 
-    decompressor = _decompressors.get(codec)
-    if decompressor is None:
+    if codec not in _SUPPORTED_CODECS:
         # Unsupported codec: surface as a null jsonl_text rather than failing
         # the pipeline -- these rows are easy to spot and backfill later.
         return None
 
+    # Instantiated per call, not module-level: a ZstdDecompressor holds a C
+    # extension context that Spark can't pickle when shipping this UDF's
+    # closure to executors ("TypeError: cannot pickle 'zstd.ZstdDecompressor'
+    # object"), which fails the whole flow at analysis time.
+    decompressor = zstd.ZstdDecompressor()
     compressed = base64.b64decode(data_b64)
     return decompressor.decompress(compressed).decode("utf-8")
 

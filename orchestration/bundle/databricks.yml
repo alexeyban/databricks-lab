@@ -207,7 +207,7 @@ resources:
       schedule:
         quartz_cron_expression: "0 */2 * * * ?"
         timezone_id: "UTC"
-        pause_status: PAUSED
+        pause_status: UNPAUSED
       tasks:
         - task_key: run_pumpapi_lakehouse
           pipeline_task:
