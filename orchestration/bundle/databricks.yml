@@ -210,11 +210,13 @@ resources:
       schedule:
         quartz_cron_expression: "0 */2 * * * ?"
         timezone_id: "UTC"
-        # Re-enabled: the mapInPandas rewrite of decode_envelope (see
-        # bronze_pump_events.py) fixed the backlog OOM -- confirmed live,
+        # Paused on request: no scheduled pipeline triggers should fire for
+        # now. The mapInPandas rewrite of decode_envelope (see
+        # bronze_pump_events.py) did fix the backlog OOM -- confirmed live,
         # a full triggered update processed ~193.5M rows into
-        # bronze.pump_events_raw without error.
-        pause_status: UNPAUSED
+        # bronze.pump_events_raw without error -- so flip this back to
+        # UNPAUSED and redeploy the bundle to resume the 2-minute cadence.
+        pause_status: PAUSED
       tasks:
         - task_key: run_pumpapi_lakehouse
           pipeline_task:
