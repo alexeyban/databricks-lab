@@ -92,12 +92,15 @@ The project captures all **15 tables** from the PostgreSQL `dvdrental` sample da
 ### Vault Layer (Data Vault 2.0)
 - **Purpose**: Enterprise-grade, fully historized, audit-ready data
 - **Storage**: Delta tables in `workspace.vault.*`
-- **Components**:
+- **Built by**: dbt models in `transformation/dbt_project/models/vault/` (incremental).
+  The older notebook implementation still exists under `processing/vault/` and is
+  what `scripts/deploy_jobs.py` deploys — see *Databricks Jobs* below.
+- **Components** (dbt model counts):
   - **Hubs** (13): Business key storage with SHA-256 hash keys
   - **Links** (19): Relationships between hubs
-  - **Satellites** (15): Append-only attribute tracking via DIFF_HASH
-  - **PIT Tables** (4): Point-in-time snapshots for time-travel queries
-  - **Bridge Tables** (2): Pre-joined many-to-many structures
+  - **Satellites** (20): Append-only attribute tracking via DIFF_HASH
+  - **PIT Tables** (4): `pit_customer`, `pit_film`, `pit_payment`, `pit_rental` — point-in-time snapshots
+  - **Bridge Tables** (2): `brg_film_cast`, `brg_rental_film` — pre-joined many-to-many structures
 
 ### Gold Layer
 - **Purpose**: Business-ready analytics models
@@ -115,28 +118,51 @@ The project includes a dedicated monitoring schema for observability:
 | Table | Purpose |
 |-------|---------|
 | `monitoring.schema_drift_log` | Schema change tracking |
+| `bronze.quarantine` | Bronze envelopes that fail validation |
 | `monitoring.dq_results` | Data quality test results |
 | `monitoring.pii_column_registry` | PII column inventory |
 | `monitoring.subject_key_store` | GDPR subject keys |
 | `monitoring.erasure_requests` | GDPR erasure queue |
 | `monitoring.erasure_registry` | Erasure status tracking |
-| `monitoring.vault_load_log` | Vault load metrics |
+| `monitoring.vault_load_log` | Vault load metrics — DDL helper exists in `NB_catalog_helpers`, not yet written to (see ROADMAP) |
 
 ---
 
 ## Databricks Jobs
 
-The dvdrental pipeline is orchestrated via 5 Databricks jobs (pump.fun adds 1 more job + 1 Lakeflow pipeline, listed above):
+Two deployment mechanisms coexist in the repo and define **different job graphs**.
+
+### Databricks Asset Bundles — `orchestration/bundle/databricks.yml`
+
+The complete picture: all dvdrental resources plus everything pump.fun.
+Deploy with `databricks bundle deploy -t dev` from `orchestration/bundle/`.
+
+| Resource | Type | Tasks | Description |
+|----------|------|-------|-------------|
+| `dvdrental-bronze` | job | 1 | Kafka → Bronze Delta |
+| `dvdrental-silver` | job | 15 | Bronze → Silver MERGE, one task per table |
+| `dvdrental-vault-gold` | job | 2 | `dbt build --select vault` then `--select gold`, as `dbt_task` against SQL warehouse `53165753164ae80e` |
+| `dvdrental-orchestrator` | job | 2 | Silver → Vault+Gold; scheduled daily 02:00 UTC (PAUSED). Bronze is excluded — it is a streaming job |
+| `pumpapi-lakehouse` | pipeline | — | Lakeflow Declarative Pipeline: Bronze + 5 Silver tables, serverless, triggered |
+| `pumpfun-bronze` | job | 2 | Triggers `pumpapi-lakehouse`, then `gold_pump_token_risk`; cron every 2 min |
+
+### Raw Jobs API — `scripts/deploy_jobs.py`
+
+The older path, dvdrental only. It builds the Vault layer from the
+`processing/vault/` **notebooks** rather than the dbt vault models, and the
+orchestrator chains four jobs instead of two.
 
 | Job | ID | Tasks | Description |
 |-----|----|-------|-------------|
-| `dvdrental-bronze` | 325293262130713 | 1 | Kafka → Bronze Delta (availableNow trigger) |
-| `dvdrental-silver` | 1099814608698427 | 15 | Bronze → Silver MERGE, 3 batches of 5 |
-| `dvdrental-vault` | 950203691556666 | 4 | Hubs → Links+Sats → Business Vault |
-| `dvdrental-vault-gold` | 83436339832760 | 1 | dbt build vault+gold via NB_run_dbt |
-| `dvdrental-orchestrator` | 684287727358557 | 4 | Chains Bronze → Silver → Vault → Vault-Gold |
-| `pumpapi-lakehouse` | deployed via `databricks bundle deploy` | 1 pipeline | Lakeflow: Bronze + 3 Silver tables |
-| `pumpfun-bronze` | deployed via `databricks bundle deploy` | 1 | Triggers `pumpapi-lakehouse`, every 2 min |
+| `dvdrental-bronze` | 325293262130713 | 1 | Kafka → Bronze Delta |
+| `dvdrental-silver` | 1099814608698427 | 15 | Bronze → Silver MERGE |
+| `dvdrental-vault` | 950203691556666 | 4 | Hubs → Links+Sats → Business Vault (notebooks) |
+| `dvdrental-vault-gold` | looked up by name | 1 | `transformation/NB_run_dbt.ipynb` (dbtRunner API) |
+| `dvdrental-orchestrator` | 684287727358557 | 4 | Bronze → Silver → Vault → Vault-Gold |
+
+The Pipelines API does not support the `git_source` mechanism `deploy_jobs.py`
+relies on, so that script manages no pump.fun resources at all. The bundle is
+the direction of travel; `deploy_jobs.py` has not been retired yet.
 
 ---
 
@@ -158,6 +184,10 @@ pump.fun (Solana on-chain trades, pool/token lifecycle events)
               silver_pump_events.py:   all events, typed columns          → workspace.silver.pump_events
               silver_pump_tokens.py:   action = 'create'                  → workspace.silver.pump_tokens
               silver_pump_transfers.py: action = 'transfer', exploded     → workspace.silver.pump_transfers
+              silver_pump_pools.py:    createPool/migrate/add/remove      → workspace.silver.pump_pools
+              silver_pump_trades.py:   action IN (buy, sell), exploded    → workspace.silver.pump_trades
+          → processing/gold/NB_process_pump_token_risk.ipynb (separate notebook task, after the pipeline)
+              → workspace.gold.gold_pump_token_risk
 ```
 
 - **Producer** (`ingestion/pumpfun/`): a long-running websocket client
@@ -174,13 +204,16 @@ pump.fun (Solana on-chain trades, pool/token lifecycle events)
   `ingestion/pumpfun/README.md`.
 - **Bronze + Silver** (`pumpapi-lakehouse/`, a **Lakeflow Declarative
   Pipeline** authored with `pyspark.pipelines` — the current Databricks
-  API, not the classic `import dlt` module): one pipeline, one DAG, four
+  API, not the classic `import dlt` module): one pipeline, one DAG, six
   transformation files:
   - `bronze_pump_events.py` — Auto Loader reads the envelope files with a
-    fixed schema, a Python UDF base64-decodes and zstd-decompresses
-    `data_b64` back into JSONL text (`zstandard` is installed via the
-    pipeline's `environment.dependencies`, not a notebook `%pip install`),
-    splits it back into lines, and lands each event as raw JSON text in
+    fixed schema, then a **`mapInPandas`** worker base64-decodes and
+    zstd-decompresses `data_b64` back into JSONL text (`zstandard` is
+    installed via the pipeline's `environment.dependencies`, not a notebook
+    `%pip install`) and yields one row per line. This replaced a scalar
+    Python UDF that returned one big decompressed-text column per envelope
+    for Spark to `split()`+`explode()` downstream — that shape OOM'd the
+    reused Python worker on a real backlog. Each event lands as raw JSON text in
     `workspace.bronze.pump_events_raw` — the event shape varies per
     `action` (`buy`, `sell`, `create`, `migrate`, `createPool`, `transfer`,
     etc.), so Bronze still does not impose a struct schema on it.
@@ -193,6 +226,12 @@ pump.fun (Solana on-chain trades, pool/token lifecycle events)
   - `silver_pump_transfers.py` — filters to `action = 'transfer'`; explodes
     the event's `transfers[]` array so each wallet-to-wallet transfer gets
     its own row.
+  - `silver_pump_pools.py` — filters to `action IN (createPool, migrate,
+    add, remove)`; one row per pool lifecycle event, carrying the
+    liquidity/pool-trust fields the risk-scoring Gold layer needs.
+  - `silver_pump_trades.py` — filters to `action IN (buy, sell)`; explodes
+    each event's `breakdown[]` array so each individual trade gets its own
+    row, which is what lets Gold detect bundled/sniped launch buys.
 
   This replaced an earlier two-job design (separate Bronze Auto Loader
   notebook + separate Silver notebook job, with a `trades`/`tokens` table
@@ -200,7 +239,16 @@ pump.fun (Solana on-chain trades, pool/token lifecycle events)
   `ingestion/consumers/outdated__NB_ingest_pumpfun_to_bronze.ipynb`,
   `ingestion/consumers/outdated__NB_dlt_pumpfun_bronze.ipynb`, and
   `processing/silver/outdated__NB_process_pumpfun_silver.ipynb`.
-- **Vault/Gold**: not yet built for pump.fun — see `ROADMAP.md`.
+- **Gold** (`processing/gold/NB_process_pump_token_risk.ipynb` →
+  `workspace.gold.gold_pump_token_risk`): hard-blocker flags + weighted risk
+  score + migration funnel status, recomputed incrementally for only the mints
+  touched since the last run. It is deliberately **not** part of the Lakeflow
+  pipeline — selective per-mint recompute needs `foreachBatch` + `MERGE`, which
+  doesn't compose with the window functions the scoring logic depends on inside
+  a declarative `@dp.table`. It runs as the second task of the `pumpfun-bronze`
+  job. See `design/pumpfun/RISK_SCORING_DESIGN.md`.
+- **Vault**: no Data Vault layer for pump.fun; whether it needs one is still
+  open — see `ROADMAP.md`.
 - **Scheduling**: the pipeline is triggered (not continuous), fired every 2
   minutes by the `pumpfun-bronze` job's `pipeline_task` — the same
   `availableNow` pattern used by `dvdrental-bronze`.
@@ -216,7 +264,7 @@ pump.fun (Solana on-chain trades, pool/token lifecycle events)
 ## Local Development vs Production
 
 ### Local Development
-- Uses `docker-compose.yml` for full CDC stack
+- Uses `infra/docker/docker-compose.yml` for the full CDC stack (run `docker compose` from `infra/docker/`)
 - PostgreSQL, Kafka, Debezium run locally
 - ngrok tunnel for Databricks → Kafka connectivity
 

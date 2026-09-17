@@ -22,6 +22,8 @@ This document covers common issues you may encounter when running the Databricks
 
 **Symptoms**: `docker compose up -d` fails or containers exit immediately.
 
+> All `docker compose` commands below run from `infra/docker/`, where the compose file lives.
+
 **Solutions**:
 ```bash
 # Check container status
@@ -45,7 +47,7 @@ docker system prune -a
 **Solutions**:
 1. Check if SQL dump file exists:
    ```bash
-   ls -la scripts/dvdrental.sql
+   ls -la infra/docker/dvdrental.sql
    ```
 
 2. Verify PostgreSQL is ready:
@@ -71,7 +73,7 @@ docker system prune -a
 # Find what's using the port
 lsof -i :5432  # or other port
 
-# Kill the process or change port in docker-compose.yml
+# Kill the process or change port in infra/docker/docker-compose.yml
 ```
 
 ---
@@ -221,9 +223,11 @@ lsof -i :5432  # or other port
    databricks secrets list --scope dvdrental
    ```
 
-2. Re-run secret push:
+2. Set the secret (see note below):
    ```bash
-   python3 scripts/push_secrets_to_databricks.py
+   # NOTE: scripts/push_secrets_to_databricks.py is referenced by docker-compose
+   # but is not present in the repo; set the secret with the Databricks CLI instead:
+   databricks secrets put-secret dvdrental kafka-external-host
    ```
 
 3. Verify scope exists:
@@ -288,7 +292,7 @@ lsof -i :5432  # or other port
 
 2. Check Silver config matches Bronze:
    ```bash
-   cat pipeline_configs/silver/dvdrental/film.json
+   cat config/silver/configs/dvdrental/film.json
    ```
 
 3. Verify primary key in config matches source
@@ -306,6 +310,8 @@ lsof -i :5432  # or other port
    ```python
    # In vault notebook
    dbutils.fs.head("/Volumes/workspace/default/mnt/pipeline_configs/datavault/dv_model.json")
+   # (only the processing/vault/ notebooks read from the Volume; the dbt vault
+   #  models read config/datavault/dv_model.json from the repo at build time)
    ```
 
 3. Verify hash key computation matches
@@ -343,7 +349,7 @@ lsof -i :5432  # or other port
 
 **Solutions**:
 ```bash
-cd cdc_gold
+cd transformation/dbt_project
 # Check profiles.yml exists and is correct
 cat ~/.dbt/profiles.yml
 
@@ -363,7 +369,7 @@ export DBT_PROFILES_DIR=.
 dbt build --debug
 
 # Check target/compiled for generated SQL
-ls target/compiled/cdc_gold/models/
+ls target/compiled/cdc_gold/models/   # 'cdc_gold' is the dbt project name
 
 # Verify source tables exist
 dbt run --select source:*
@@ -413,11 +419,11 @@ dbt run --select source:*
 
 **Solutions**:
 1. Run PII tagging notebook:
-   - `notebooks/helpers/NB_pii_catalog_helpers.ipynb`
+   - `processing/common/NB_pii_catalog_helpers.ipynb`
 
 2. Verify pii_config.json:
    ```bash
-   cat pipeline_configs/pii/pii_config.json
+   cat processing/vault/pii_config.json
    ```
 
 3. Check Unity Catalog tags applied
@@ -439,7 +445,7 @@ dbt run --select source:*
    - Verify encryption/decryption functions work
 
 3. Run erasure notebook manually:
-   - `notebooks/helpers/NB_process_erasure.ipynb`
+   - `processing/common/NB_process_erasure.ipynb`
 
 ---
 
@@ -506,7 +512,7 @@ curl http://localhost:8081/subjects
 python3 -c "from databricks.sdk import WorkspaceClient; w = WorkspaceClient(); print([c.cluster_name for c in w.clusters.list()])"
 
 # dbt
-cd cdc_gold && dbt debug && dbt build
+cd transformation/dbt_project && dbt debug && dbt build --select vault gold
 ```
 
 ---

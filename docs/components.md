@@ -12,6 +12,7 @@ This document provides a detailed breakdown of all components in the Databricks 
 4. [Enterprise Layer](#enterprise-layer)
 5. [Analytics Layer](#analytics-layer)
 6. [Automation & Tools](#automation--tools)
+7. [pump.fun Pipeline Components](#pumpfun-pipeline-components)
 
 ---
 
@@ -22,7 +23,7 @@ This document provides a detailed breakdown of all components in the Databricks 
 **What it does**: Provides a complete local development environment with PostgreSQL, Kafka, Debezium, and supporting services.
 
 **How it works**:
-- `docker-compose.yml` defines 6 services: Zookeeper, Kafka, Schema Registry, PostgreSQL, Debezium Connect, Kafka UI
+- `infra/docker/docker-compose.yml` defines 6 always-on services: Zookeeper, Kafka, Schema Registry, PostgreSQL, Debezium Connect, Kafka UI, plus opt-in `manual`/`kafka-to-volume` profile services
 - PostgreSQL is configured with `wal_level=logical` for logical replication
 - Debezium Connect reads PostgreSQL WAL and publishes to Kafka topics
 - Schema Registry manages Avro schemas for Kafka messages
@@ -34,9 +35,9 @@ This document provides a detailed breakdown of all components in the Databricks 
 - Serves as a reference architecture for production deployments
 
 **Files**:
-- `docker-compose.yml` - Main stack definition
-- `docker/init-dvdrental.sh` - Database initialization script
-- `postgres-connector.json` - Debezium connector configuration
+- `infra/docker/docker-compose.yml` - Main stack definition (run `docker compose` from `infra/docker/`)
+- `infra/docker/init-dvdrental.sh` - Database initialization script
+- `ingestion/cdc/postgres-connector.json` - Debezium connector configuration
 
 ---
 
@@ -64,7 +65,7 @@ This document provides a detailed breakdown of all components in the Databricks 
 
 **What it does**: Simulates real business activity by continuously inserting rentals, processing returns, and creating payments.
 
-**How it works** (`ingestion/generators/load_generator.py`):
+**How it works** (`ingestion/load_generator.py`):
 - Connects to PostgreSQL directly
 - Randomly selects actions: insert rental (40%), return rental (35%), insert payment (25%)
 - Inserts new rentals with random customer/inventory/staff
@@ -79,9 +80,9 @@ This document provides a detailed breakdown of all components in the Databricks 
 
 **Usage**:
 ```bash
-python3 ingestion/generators/load_generator.py
+python3 ingestion/load_generator.py
 # With custom settings:
-ITERATIONS=100 SLEEP_MIN=0.5 SLEEP_MAX=2.0 python3 ingestion/generators/load_generator.py
+ITERATIONS=100 SLEEP_MIN=0.5 SLEEP_MAX=2.0 python3 ingestion/load_generator.py
 ```
 
 ---
@@ -90,14 +91,14 @@ ITERATIONS=100 SLEEP_MIN=0.5 SLEEP_MAX=2.0 python3 ingestion/generators/load_gen
 
 **What it does**: Seeds a realistic initial data volume into PostgreSQL before running the pipeline for the first time.
 
-**How it works** (`ingestion/generators/load_bulk_data.py`):
+**How it works** (`ingestion/load_bulk_data.py`):
 - Inserts 1000 customers and 1000 films
 - Generates 10000+ DML events (rentals, returns, payments, film updates)
 - Designed for one-time use before pipeline launch to ensure non-trivial data volumes
 
 **Usage**:
 ```bash
-python3 ingestion/generators/load_bulk_data.py
+python3 ingestion/load_bulk_data.py
 ```
 
 ---
@@ -106,7 +107,7 @@ python3 ingestion/generators/load_bulk_data.py
 
 **What it does**: Simulates catalog changes by updating film attributes (rental rate, duration, replacement cost).
 
-**How it works** (`ingestion/generators/load_products_generator.py`):
+**How it works** (`ingestion/load_products_generator.py`):
 - Randomly selects films and updates their pricing/duration attributes
 - Waits for initial dvdrental load before starting
 - Runs continuously until interrupted
@@ -119,7 +120,7 @@ python3 ingestion/generators/load_bulk_data.py
 
 **Usage**:
 ```bash
-python3 ingestion/generators/load_products_generator.py
+python3 ingestion/load_products_generator.py
 ```
 
 ---
@@ -128,7 +129,7 @@ python3 ingestion/generators/load_products_generator.py
 
 **What it does**: Updates slowly-changing reference data (addresses, categories, etc.).
 
-**How it works** (`generators/load_reference_generator.py`):
+**How it works** (`ingestion/load_reference_generator.py`):
 - Modifies reference tables at lower frequency
 - Helps test handling of low-change vs high-change attributes
 
@@ -136,6 +137,16 @@ python3 ingestion/generators/load_products_generator.py
 - Provides variety in change rates across satellites
 - Tests satellite strategies (high-change vs low-change separation)
 - Enables testing of PIT table functionality with real time-travel data
+
+**Usage**:
+```bash
+python3 ingestion/load_reference_generator.py
+```
+
+Both continuous generators can also be run together in Docker:
+```bash
+cd infra/docker && docker compose --profile manual up -d generate-cdc-traffic
+```
 
 ---
 
@@ -203,22 +214,31 @@ python3 ingestion/generators/load_products_generator.py
 
 **What it does**: Legacy notebooks for specific tables (kept for reference).
 
-**Files**:
-- `NB_process_to_silver.ipynb` - Rental-specific
-- `NB_process_products_silver.ipynb` - Film-specific
-- `NB_process_payment_silver.ipynb` - Payment-specific
+**Files** (all under `processing/silver/`):
+- `outdated__NB_process_to_silver.ipynb` - Rental-specific
+- `outdated__NB_process_products_silver.ipynb` - Film-specific
+- `outdated__NB_process_payment_silver.ipynb` - Payment-specific
+- `outdated__NB_process_pumpfun_silver.ipynb` - pump.fun, superseded by the Lakeflow pipeline
 
-**Why they exist**: Preserved for reference and comparison with generic approach.
+**Why they exist**: Preserved for reference and comparison with the generic approach.
+The `outdated__` prefix marks them as not wired into any job.
 
 ---
 
 ## Enterprise Layer
 
+> **Status:** the Vault layer now ships as **dbt models**
+> (`transformation/dbt_project/models/vault/`). The notebooks described in this
+> section still exist under `processing/vault/` and are what
+> `scripts/deploy_jobs.py` deploys as the `dvdrental-vault` job; the Asset
+> Bundle path does not use them. See *dbt Project* below for the model counts
+> that are actually current.
+
 ### Vault Metadata Notebook
 
 **What it does**: Loads and parses the Data Vault 2.0 configuration, provides utility functions.
 
-**How it works** (`notebooks/vault/NB_dv_metadata.ipynb`):
+**How it works** (`processing/vault/NB_dv_metadata.ipynb`):
 - Reads `dv_model.json` from Unity Catalog Volume
 - Parses hub, link, satellite, PIT, bridge configurations
 - Provides hash key generation functions:
@@ -237,7 +257,7 @@ python3 ingestion/generators/load_products_generator.py
 
 **What it does**: Loads business keys into Hub tables.
 
-**How it works** (`notebooks/vault/NB_ingest_to_hubs.ipynb`):
+**How it works** (`processing/vault/NB_ingest_to_hubs.ipynb`):
 - Reads from Silver tables
 - Computes SHA-256 hash key: `sha2(concat_ws("||", UPPER(TRIM(key))), 256)`
 - MERGE on hash key (insert-only, no updates)
@@ -256,7 +276,7 @@ python3 ingestion/generators/load_products_generator.py
 
 **What it does**: Loads relationships between hubs into Link tables.
 
-**How it works** (`notebooks/vault/NB_ingest_to_links.ipynb`):
+**How it works** (`processing/vault/NB_ingest_to_links.ipynb`):
 - Reads from Silver tables
 - Resolves hash keys for each foreign key
 - Computes composite hash key for the relationship
@@ -274,12 +294,12 @@ python3 ingestion/generators/load_products_generator.py
 
 **What it does**: Loads attribute changes into Satellite tables.
 
-**How it works** (`notebooks/vault/NB_ingest_to_satellites.ipynb`):
+**How it works** (`processing/vault/NB_ingest_to_satellites.ipynb`):
 - Reads from Silver tables
 - Computes DIFF_HASH: `sha2(concat_ws("||", coalesce(col, "NULL") for each column), 256)`
 - Left joins against current satellite hash per hub key
 - Appends only new/changed rows (append-only, no updates or deletes)
-- Creates 15 satellite tables split by change rate
+- Creates 15 satellite tables split by change rate (the dbt vault layer that superseded these notebooks has 20)
 
 **Why it was developed**:
 - Provides complete history of all attribute changes
@@ -294,7 +314,7 @@ python3 ingestion/generators/load_products_generator.py
 
 **What it does**: Creates query-acceleration structures.
 
-**How it works** (`notebooks/vault/NB_dv_business_vault.ipynb`):
+**How it works** (`processing/vault/NB_dv_business_vault.ipynb`):
 - **PIT Tables**: Daily snapshots linking hub keys to satellite load dates
 - **Bridge Tables**: Pre-joined multi-hop paths (rental→film, film→actor)
 
@@ -315,7 +335,9 @@ python3 ingestion/generators/load_products_generator.py
 **How it works** (`transformation/NB_run_dbt.ipynb`):
 - Uses the dbtRunner Python API — no subprocess or shell exec
 - Selects `vault gold` targets in one `dbt build` call
-- Runs as a single-task Databricks job (`dvdrental-vault-gold`)
+- Runs as a single-task Databricks job (`dvdrental-vault-gold`) on the
+  `scripts/deploy_jobs.py` path. The Asset Bundle path skips this notebook
+  entirely and runs `dbt build` as two native `dbt_task`s instead
 - dbt_packages are pre-committed to the repo; no `dbt deps` needed at runtime
 
 **Why it was developed**:
@@ -334,13 +356,17 @@ python3 ingestion/generators/load_products_generator.py
 **Models**:
 
 *Vault models* (`models/vault/`) — incremental, write to `workspace.vault.*`:
-- **15 hub models** (hubs/): one per entity
+- **13 hub models** (hubs/): one per entity — actor, address, category, city,
+  country, customer, film, inventory, language, payment, rental, staff, store
 - **19 link models** (links/): all relationships
-- **15 satellite models** (satellites/): attribute history
-- **4 PIT tables** (pit/): point-in-time snapshots (materialized as tables)
-- **2 bridge tables** (bridge/): pre-joined many-to-many paths
+- **20 satellite models** (satellites/): attribute history, split by change rate
+  (`*_core` / `*_details` / `*_pricing`)
+- **4 PIT tables** (pit/): `pit_customer`, `pit_film`, `pit_payment`, `pit_rental`
+  (materialized as tables)
+- **2 bridge tables** (bridge/): `brg_film_cast`, `brg_rental_film`
 
-*Gold models* (`models/gold/`) — write to `workspace.gold.*`:
+*Gold models* (`models/gold/`) — write to `workspace.gold.*`. `gold_film` and
+`gold_rental` are incremental; the other five are full-refresh tables:
 - `gold_film`: Film with `rental_rate_tier` derived column
 - `gold_rental`: Rental with `rental_status` and `total_paid`
 - `gold_customer_summary`: Customer lifetime value and rental history
@@ -373,47 +399,72 @@ dbt test                           # Tests only
 **What it does**: Deploys/redeploys all Databricks jobs.
 
 **How it works** (`scripts/deploy_jobs.py`):
-- Creates/updates 5 jobs: Bronze, Silver, Vault, Vault-Gold, Orchestrator
-- Configures Git source for notebooks
+- Creates/updates 5 dvdrental jobs: Bronze, Silver, Vault, Vault-Gold, Orchestrator
+- Configures Git source (`git_source` pinned to `main`) for notebooks
 - Sets up task dependencies (orchestrator chains all 4 sub-jobs)
-- Supports `--run-orchestrator` flag for immediate execution after deploy
+- Supports `--run-orchestrator` / `--run-silver` for immediate execution after deploy
+- Deploys **nothing** for pump.fun — the Pipelines API doesn't support `git_source`
 
 **Why it was developed**:
-- Infrastructure-as-code for Databricks jobs
-- Reproducible deployments
-- Single command to deploy entire pipeline
-- Supports Slack webhooks for alerting
+- Infrastructure-as-code for Databricks jobs before Asset Bundles were adopted
+- Reproducible deployments from a single command
 
 ---
 
-### Secret Management
+### Databricks Asset Bundle
 
-**What it does**: Pushes Kafka bootstrap servers and credentials to Databricks secret scope.
+**What it does**: Declares every Databricks resource — dvdrental jobs plus the
+pump.fun pipeline and its trigger job — in one file.
 
-**How it works** (`scripts/push_secrets_to_databricks.py`):
-- Reads from `.env` file
-- Creates/updates secrets in Databricks scope `dvdrental`
-- Required for Databricks to connect to Kafka
+**How it works** (`orchestration/bundle/databricks.yml`):
+- `dev` and `prod` targets; `sync.paths` covers the whole repo because task
+  paths reach outside `orchestration/bundle/`
+- Builds the Vault layer with native `dbt_task`s instead of the vault notebooks
+- Declares the `pumpapi-lakehouse` Lakeflow pipeline (serverless, triggered) and
+  the `pumpfun-bronze` job that fires it every 2 minutes
+
+```bash
+cd orchestration/bundle && databricks bundle deploy -t dev
+```
 
 **Why it was developed**:
-- Secure credential management
-- Avoids hardcoded secrets in notebooks
-- Enables separation of Dev/Prod environments
+- Environment-aware deployments (dev/prod targets)
+- The only way to deploy the Lakeflow pipeline
+- Supersedes `scripts/deploy_jobs.py`, which has not been retired yet
 
 ---
 
-### Vault Config Upload
+### Vault dbt Model Generator
 
-**What it does**: Uploads Data Vault configuration to Unity Catalog Volume.
+**What it does**: Generates the dbt vault models from the Data Vault config.
 
-**How it works** (`scripts/upload_vault_config.py`):
-- Copies `dv_model.json` to Volume at `mnt/pipeline_configs/datavault/`
-- Vault notebooks read config from this location
+**How it works** (`scripts/generate_vault_dbt_models.py`):
+- Reads `config/datavault/dv_model.json`
+- Emits hub / link / satellite / PIT / bridge models into
+  `transformation/dbt_project/models/vault/`
 
 **Why it was developed**:
-- Centralized configuration for vault notebooks
-- Enables configuration changes without code changes
-- Supports Dev/Test/Prod environments
+- Keeps 58 vault models consistent with one config file
+- Re-running it is how you add an entity to the vault layer
+
+---
+
+### Missing scripts referenced by Docker Compose
+
+`infra/docker/docker-compose.yml` still declares `manual`-profile services that
+invoke scripts which **are not in the repo**. These profiles fail as written:
+
+| Compose service | Script it calls | Present? |
+|-----------------|-----------------|----------|
+| `deploy-databricks-jobs` | `scripts/push_secrets_to_databricks.py` | No |
+| `deploy-databricks-jobs` | `scripts/deploy_job.py` (note: the real file is `deploy_jobs.py`) | No |
+| `upload-vault-config` | `scripts/upload_vault_config.py` | No |
+| `kafka-to-volume` | `scripts/kafka_to_volume.py` | No |
+
+Secrets and vault-config upload therefore have no working automation in-repo
+right now; the vault dbt models read their config from
+`config/datavault/dv_model.json` at build time rather than from a Volume, so
+only the notebook vault path needs the upload.
 
 ---
 
@@ -421,25 +472,21 @@ dbt test                           # Tests only
 
 **What it does**: Auto-generates Data Vault design from Silver schema.
 
-**How it works** (`generators/dv_generator/`):
+**Status**: **archived.** The generator has been moved to `archive/` (git-ignored)
+now that its output — `config/datavault/dv_model.json` — is committed and treated
+as the static source of truth. It is no longer importable from the repo.
+
+**What it did**:
 - 7-step CLI tool: analyze → classify → generate → review → validate → apply
-- Analyzes Silver schema and classifies entities (hub/link/sat)
-- Generates vault notebooks and `dv_model.json`
-- Includes AI classifier for intelligent entity classification
+- Analyzed the Silver schema and classified entities (hub/link/sat)
+- Generated vault notebooks and `dv_model.json`
+- Included an AI classifier for entity classification
 
-**Why it was developed**:
-- Eliminates manual vault design effort
-- Ensures consistent naming and structure
-- Speeds up Data Vault implementation
-- Validates design before applying
-
-**Usage**:
-```bash
-python -m generators.dv_generator.main --analyze \
-  --config-dir pipeline_configs/silver/dvdrental --no-ai
-
-python -m generators.dv_generator.main --resume <session_id> --from-step step6_validator
-```
+**What remains**:
+- `config/datavault/dv_model.json` — the approved output, still the vault config
+- `design/dv2/` — the design documents and implementation log
+- `generated/dv_sessions/` — the recorded generator sessions
+- `scripts/generate_vault_dbt_models.py` — turns `dv_model.json` into dbt models
 
 ---
 
@@ -448,9 +495,10 @@ python -m generators.dv_generator.main --resume <session_id> --from-step step6_v
 **What it does**: AI-assisted automation for Databricks operations.
 
 **How it works**:
-- `Agents/` - 24 specialized agent roles (data engineer, architect, job operator, etc.)
-- `skills/` - 24 reusable skill definitions
-- `runtime/autonomous_agent.py` - Agent loop that generates code, uploads, runs, retries
+- `Agents/` - 26 specialized agent roles (data engineer, architect, job operator, etc.)
+- `skills/` - 25 reusable skill definitions
+- `processing/common/autonomous_agent.py` - Agent loop that generates code, uploads, runs, retries
+- `processing/common/databricks_client.py` / `databricks_tools.py` - Workspace API helpers used by that loop
 
 **Agents include**:
 - `engineering-data-engineer.md` - CDC, dbt, pipeline work
@@ -489,13 +537,79 @@ python -m generators.dv_generator.main --resume <session_id> --from-step step6_v
 
 **What it does**: Utility functions for common operations.
 
+All live under `processing/common/`:
+
 | Notebook | Purpose |
 |----------|---------|
-| `NB_catalog_helpers.ipynb` | Table creation, MERGE helpers |
-| `NB_schema_contracts.ipynb` | Expected schema definitions |
-| `NB_silver_metadata.ipynb` | Per-table config loader |
+| `NB_catalog_helpers.ipynb` | Table/schema creation, MERGE helpers, monitoring-table DDL |
+| `NB_schema_contracts.ipynb` | Expected schema definitions for Bronze envelopes and Silver tables |
+| `NB_silver_metadata.ipynb` | Per-table Silver config loader |
 | `NB_reset_tables.ipynb` | Drop tables, clear checkpoints |
-| `NB_confluence_generator.ipynb` | Generate Confluence docs |
+| `NB_confluence_generator.ipynb` | Generate Confluence docs (with `confluence_doc_generator.py`) |
+
+---
+
+## pump.fun Pipeline Components
+
+A second, independent pipeline. It shares the lakehouse but no schemas, configs
+or jobs with dvdrental.
+
+### Websocket Producer
+
+**What it does**: Streams live pump.fun trading events into a Unity Catalog Volume.
+
+**How it works** (`ingestion/pumpfun/`):
+- `app/pumpapi.py` — websocket client, reconnects with exponential backoff
+- `app/writer.py` — buffers events; each flush (default 5000) is serialized as
+  JSONL, zstd-compressed, base64-encoded into one JSON envelope file
+- `app/uploader.py` — uploads completed envelopes via the Databricks Files API
+- `app/main.py` — wires the three into one asyncio process
+
+**Why it was developed**:
+- pump.fun has no CDC-capable database behind it, so this plays the role
+  Debezium+Kafka play for dvdrental
+- Compression cuts upload size ~4-5x versus one line per event
+- Runs outside Databricks (systemd unit or Docker) because it must be always-on,
+  not scheduled
+
+---
+
+### Lakeflow Declarative Pipeline
+
+**What it does**: Turns the compressed envelopes into Bronze + 5 Silver tables.
+
+**How it works** (`pumpapi-lakehouse/transformations/`, `pyspark.pipelines`):
+
+| File | Table | Notes |
+|------|-------|-------|
+| `bronze_pump_events.py` | `bronze.pump_events_raw` | Auto Loader + a `mapInPandas` worker that base64-decodes and zstd-decompresses each envelope, yielding one row per event line |
+| `silver_pump_events.py` | `silver.pump_events` | Every event, typed, with `dp.expect` DQ checks |
+| `silver_pump_tokens.py` | `silver.pump_tokens` | `action = 'create'` — one row per token launch |
+| `silver_pump_transfers.py` | `silver.pump_transfers` | `action = 'transfer'`, `transfers[]` exploded |
+| `silver_pump_pools.py` | `silver.pump_pools` | `createPool`/`migrate`/`add`/`remove` pool lifecycle events |
+| `silver_pump_trades.py` | `silver.pump_trades` | `action IN (buy, sell)`, `breakdown[]` exploded |
+
+**Why `mapInPandas`**: the original scalar UDF returned one fully decompressed
+text column per envelope for Spark to `split()`+`explode()`, which exhausted the
+reused Python worker's memory on a real backlog. Bounding batch sizes three
+different ways did not help; emitting rows incrementally did.
+
+---
+
+### pump.fun Gold — Token Risk Scoring
+
+**What it does**: Scores each token for rug-pull risk.
+
+**How it works** (`processing/gold/NB_process_pump_token_risk.ipynb` →
+`workspace.gold.gold_pump_token_risk`):
+- Hard-blocker flags + weighted score + migration funnel status
+- Selective incremental recompute: only mints with activity since the last run
+- Runs as the second task of the `pumpfun-bronze` job, after the pipeline
+
+**Why it is not in the Lakeflow pipeline**: selective per-mint recompute needs
+`foreachBatch` + `MERGE`, which doesn't compose with the window functions the
+scoring logic uses inside a declarative `@dp.table`. See
+`design/pumpfun/RISK_SCORING_DESIGN.md`.
 
 ---
 
@@ -504,8 +618,11 @@ python -m generators.dv_generator.main --resume <session_id> --from-step step6_v
 | Category | Components | Purpose |
 |----------|------------|---------|
 | Infrastructure | Docker CDC Stack, PostgreSQL | Local development environment |
-| Data Generation | Bulk loader + 2 continuous generators | Seed + continuous CDC test traffic |
-| Ingestion | Bronze + Silver notebooks | Raw → clean data |
-| Enterprise | Vault (Hubs, Links, Sats, PIT, Bridge) | Historized, audit-ready layer |
-| Analytics | dbt vault models + 7 gold marts, NB_run_dbt | Business-ready models via Databricks job |
+| Data Generation | Bulk loader + 3 continuous generators | Seed + continuous CDC test traffic |
+| Ingestion (dvdrental) | Bronze + generic Silver notebooks | Raw → clean data |
+| Enterprise | Vault: 13 hubs, 19 links, 20 sats, 4 PITs, 2 bridges | Historized, audit-ready layer |
+| Analytics | dbt vault models + 7 gold marts | Business-ready models |
+| Ingestion (pump.fun) | Websocket producer + Lakeflow pipeline | Live Solana events → Bronze + 5 Silver |
+| Analytics (pump.fun) | `gold_pump_token_risk` notebook | Rug-pull risk scoring |
+| Deployment | Asset Bundle (all) / `deploy_jobs.py` (dvdrental) | Two coexisting job graphs |
 | Automation | scripts/deploy_jobs.py, Agent System, DQ/GDPR | Operations and compliance |

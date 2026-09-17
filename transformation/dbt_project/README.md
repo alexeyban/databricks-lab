@@ -10,7 +10,14 @@ dbt project for the Vault incremental models and Gold presentation layer of the 
 
 ## Running on Databricks
 
-The canonical way to run this project is via the `transformation/NB_run_dbt.ipynb` notebook, which uses the dbtRunner Python API (no subprocess). It is wired into the `dvdrental-vault-gold` Databricks job and runs after the vault notebook job completes.
+Two paths exist, depending on how the jobs were deployed:
+
+- **Asset Bundle** (`orchestration/bundle/databricks.yml`) — the `dvdrental-vault-gold`
+  job runs two native `dbt_task`s against SQL warehouse `53165753164ae80e`:
+  `dbt deps && dbt build --select vault`, then `dbt build --select gold`.
+- **`scripts/deploy_jobs.py`** — the same job instead runs
+  `transformation/NB_run_dbt.ipynb`, which calls the dbtRunner Python API
+  (no subprocess), after the `dvdrental-vault` notebook job completes.
 
 dbt_packages are committed to the repo — no `dbt deps` needed at runtime.
 
@@ -50,9 +57,9 @@ All models source from Silver tables in `workspace.silver.*`:
 
 All vault models are **incremental** and write to `workspace.vault.*`. They replicate and extend the Python notebook vault layer using dbt's incremental materialization.
 
-### Hubs (`hubs/`) — 15 models
+### Hubs (`hubs/`) — 13 models
 
-One hub per entity: `hub_film`, `hub_rental`, `hub_payment`, `hub_customer`, `hub_inventory`, `hub_actor`, `hub_staff`, `hub_store`, `hub_address`, `hub_city`, `hub_country`, `hub_language`, `hub_category`, and 2 additional hubs.
+One hub per entity: `hub_actor`, `hub_address`, `hub_category`, `hub_city`, `hub_country`, `hub_customer`, `hub_film`, `hub_inventory`, `hub_language`, `hub_payment`, `hub_rental`, `hub_staff`, `hub_store`.
 
 Each hub: SHA-256 hash key, business key, load date, record source.
 
@@ -60,25 +67,28 @@ Each hub: SHA-256 hash key, business key, load date, record source.
 
 All relationships between hubs: `lnk_rental_customer`, `lnk_rental_inventory`, `lnk_payment_rental`, `lnk_film_actor`, `lnk_film_category`, and 14 more. Each link carries a composite SHA-256 hash key.
 
-### Satellites (`satellites/`) — 15 models
+### Satellites (`satellites/`) — 20 models
 
-Attribute history per hub, append-only via DIFF_HASH change detection. One satellite per Silver table (or per change-rate group).
+Attribute history per hub, append-only via DIFF_HASH change detection. Entities with
+mixed change rates are split — e.g. `sat_film_core`, `sat_film_details` and
+`sat_film_pricing`; `sat_customer_core` and `sat_customer_details`.
 
 ### PIT Tables (`pit/`) — 4 models
 
 Materialized as **tables** (not incremental). Daily snapshot spine joining hub keys to satellite load dates:
-`pit_film`, `pit_rental`, `pit_customer`, `pit_inventory`.
+`pit_customer`, `pit_film`, `pit_payment`, `pit_rental`.
 
 ### Bridge Tables (`bridge/`) — 2 models
 
 Pre-joined many-to-many paths for query acceleration:
-`brg_rental_film`, `brg_film_actor`.
+`brg_rental_film`, `brg_film_cast`.
 
 ---
 
 ## Gold Models (`models/gold/`)
 
-All gold models are incremental and write to `workspace.gold.*`.
+All gold models write to `workspace.gold.*`. `gold_film` and `gold_rental` are
+incremental; the other five are full-refresh tables.
 
 | Model | Source | Description |
 |-------|--------|-------------|
@@ -94,8 +104,24 @@ All gold models are incremental and write to `workspace.gold.*`.
 
 ## Data Quality Tests
 
-- `silver_film`: `film_id` unique + not null, `title` not null
-- `silver_rental`: `rental_id` unique + not null, `last_updated_dt` not null
-- `silver_payment`: `payment_id` unique + not null, `rental_id` not null, `amount` not null
-- Gold models: row count > 0, key uniqueness, referential integrity
-- Source freshness driven by `last_updated_dt`
+**Source tests** (`models/sources.yml`) — PK `not_null` + `unique` on every Silver
+table, plus `not_null` on junction-table foreign keys and key attributes such as
+`silver_film.title`.
+
+**Gold model tests** (`models/gold/gold_rental.yml`, which covers both
+`gold_rental` and `gold_film`):
+- `dbt_expectations.expect_table_row_count_to_be_between(min_value: 1)` on both models
+- `gold_rental`: `rental_id` unique + not null; `inventory_id`, `customer_id`,
+  `rental_date`, `last_updated_dt` not null; `rental_status` in `open`/`returned`;
+  `total_paid` between 0 and 200
+- `gold_film`: `film_id` unique + not null; `title` not null; `rental_rate` between
+  0.99 and 4.99; `rental_rate_tier` in `budget`/`standard`/`premium`
+
+**Singular tests** (`tests/`):
+- `assert_gold_payment_totals_match_silver.sql` — Gold/Silver payment reconciliation
+- `assert_total_products_order_positive_amount.sql`
+- `assert_total_products_order_unique_grain.sql`
+
+**Macros** (`macros/`):
+- `write_dq_results()` — `on-run-end` hook writing every test result to `monitoring.dq_results`
+- `suppress_erased_subjects()` — GDPR suppression applied in Gold models
