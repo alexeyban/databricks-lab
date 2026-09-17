@@ -12,6 +12,11 @@ infra/docker/data/**
 # Archived generator (static dv_model.json used instead)
 archive/
 
+# Editor / agent-tool state — local only, never pushed
+.idea/
+.serena/
+.claude/
+
 # pump.fun ingestor — local JSONL landing buffer and its venv
 ingestion/pumpfun/data/
 ingestion/pumpfun/venv/
