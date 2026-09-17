@@ -4,7 +4,8 @@ A [Lakeflow Declarative Pipeline](https://docs.databricks.com/aws/en/dlt/)
 (the modern `pyspark.pipelines` API — successor to `import dlt`) that turns
 the compressed batch envelopes landed by [`../ingestion/pumpfun`](../ingestion/pumpfun/)
 into Bronze + Silver Delta tables. One pipeline, one DAG: Bronze and all
-five Silver tables run together as a single triggered update.
+five Silver tables run together as a single triggered update, fired every 2
+minutes by the `pumpfun-bronze` job.
 
 Gold (`gold_pump_token_risk`) is **not** part of this pipeline — it's a
 separate notebook, `processing/gold/NB_process_pump_token_risk.ipynb`, run
@@ -45,7 +46,7 @@ databricks bundle deploy -t dev
 
 | File | Table | Notes |
 |------|-------|-------|
-| `bronze_pump_events.py` | `workspace.bronze.pump_events_raw` | Auto Loader over the landing Volume; base64-decodes + zstd-decompresses each envelope's `data_b64` (via a small Python UDF — `zstandard` is installed through the pipeline's `environment.dependencies`, not a cluster library), splits the batch back into individual event lines, and keeps each event's raw JSON as the `event` column. Partitioned by `_ingested_date`. |
+| `bronze_pump_events.py` | `workspace.bronze.pump_events_raw` | Auto Loader over the landing Volume; base64-decodes + zstd-decompresses each envelope's `data_b64` in a `mapInPandas` worker (`zstandard` is installed through the pipeline's `environment.dependencies`, not a cluster library), yielding one row per event line and keeping each event's raw JSON as the `event` column. It replaced a scalar Python UDF that returned one big decompressed-text column per envelope for Spark to `split()`+`explode()` — that shape OOM'd the reused Python worker on a real backlog. Partitioned by `_ingested_date`. |
 | `silver_pump_events.py` | `silver.pump_events` | Parses every event (regardless of `action`) against a fixed schema into typed columns; `dp.expect` DQ checks require non-null `signature`/`action`. |
 | `silver_pump_tokens.py` | `silver.pump_tokens` | Filters to `action = 'create'`; one row per token launch, with initial price/market cap and mint/freeze authority (rug-pull risk signals). |
 | `silver_pump_transfers.py` | `silver.pump_transfers` | Filters to `action = 'transfer'`; explodes the event's `transfers[]` array so each wallet-to-wallet transfer inside a transaction gets its own row. |
