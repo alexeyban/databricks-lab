@@ -6,7 +6,6 @@ __pycache__/
 .databrickscfg
 venv/
 logs/
-docs/
 scripts/dvdrental.sql
 infra/docker/data/**
 
@@ -16,3 +15,6 @@ archive/
 # pump.fun ingestor — local JSONL landing buffer and its venv
 ingestion/pumpfun/data/
 ingestion/pumpfun/venv/
+
+# Vendored dbt package docs (the project's own docs/ are tracked)
+transformation/dbt_project/dbt_packages/**/docs/
